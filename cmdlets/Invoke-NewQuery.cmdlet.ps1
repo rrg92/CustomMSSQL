@@ -563,6 +563,10 @@ Function Invoke-NewQuery  {
 			 #The min version must be specified in format MAJOR.MINOR.BUILD or a numeric value represting it.
 			 #If cmdlet cannot obtain instance version, the exception CANNOT_GET_MINVERSION is throwed!
 				$MinVersion = $null
+				
+			,#BETA! Executes sp_whoisactive @find_block_leaders = 1,@sort_order = '[blocked_session_count] DESC'
+			 #The sp_whoisactive must exists and user must have permissions to run it.
+			 [switch]$FindBlockers = $false
 	)
 	
 begin {
@@ -632,6 +636,10 @@ end {
 					throw $ex;
 				}
 			}
+		}
+		
+		if($FindBlockers){
+			$Query = "EXEC sp_whoisactive @find_block_leaders = 1, @sort_order = '[blocked_session_count] DESC' ";
 		}
 		
 		if(!$Query)
