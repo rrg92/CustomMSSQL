@@ -20,6 +20,7 @@ $FunctionsToExport = @()
 $GMV = @{MODULE_ROOT=$ModuleRoot; PSM_PATH=$ModulePsm};
 $GMV.add("CMDLETSIDR",(Resolve-Path $CmdLetsDir))
 $GMV.add("AUXDIR",(Resolve-Path $AuxDir))
+$GMV.add("CHANGELOGFILE",(Resolve-Path ".\CHANGELOG.md"))
 $GMV.add("VARS",@{})
 
 # Function created just to we have access to moduleinfo object that represent this module. If you know another way, update this method.

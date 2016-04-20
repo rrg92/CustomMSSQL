@@ -1383,7 +1383,6 @@ Function Copy-SQLDatabase {
 		
 			KNOW BUGS AND TO DO LIST:
 				- TODO: Allow user specify a separate location for post script execution results.
-				- TODO: Attempt create the RestoreFolder 
 				- TODO: Implement throttling. Reconsider this name, because is to dificult write....
 				- TODO: Implement locked file access enchament.
 

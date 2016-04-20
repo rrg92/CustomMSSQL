@@ -32,7 +32,7 @@ Function Invoke-DatabaseShrink {
 		$L.ExternalVerboseMode = $IsVerbose; 
 		
 		
-		$L | Invoke-Log "Script Starting!";
+		$L | Invoke-Log "Script Starting!" "PROGRESS";
 		
 		#This contains all values shared by entire script. 
 		$VALUES = @{
