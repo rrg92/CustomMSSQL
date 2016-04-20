@@ -49,7 +49,7 @@ Function GetVersionChangeLog {
 		$GroupLineRegEx = "^### ($AllGroups)"
 		
 		$ComponentRegEx = "^- \(([^)]+)\)"
-	
+		$LinkLineRegEx = "^\[[^\]]+\]:"
 	
 	$VersionLineFound = $false;
 	$CurrentGroup = "";
@@ -63,25 +63,35 @@ Function GetVersionChangeLog {
 			return;
 		}
 		
-		if(!$VersionLineFound){
-			if($_ -match $MatchVersionLineRegEx){
+		if($_ -match $LinkLineRegEx){ #if a link [xxxxx]:
+			return;
+		}
+		
+		if(!$_){
+			return; # if empty line!
+		}
+		
+		if($_ -match $MatchVersionLineRegEx){
+			if($VersionLineFound){
+				#If the VersionLine already found, then this mark end of previous version logs...
+				$Ended = $true;
+			} else {
+				#If not found, this is start of a version that we dump!
 				$VersionLineFound = $true;
 				$VersionText = $matches[1];
 			}
 			
+			return; #next line!
+		}
+		
+		if(!$VersionLineFound){
 			return; #Continue to next line!
 		}
 		
-		#If current line is a group...
+		#if matchs a group of changes header...
 		if($_ -match $GroupLineRegEx){
 			$CurrentGroup = $matches[1];
 			return;
-		}
-		
-		#If current line is empty... and VersionLine was found... Mark read as ended...
-		if(!$_ -and $VersionLineFound){
-			$Ended = $true;
-			return; #Do nothing!
 		}
 	
 		#If line starts with the component specifications...
