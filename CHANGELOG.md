@@ -15,4 +15,4 @@ This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 - The module psd1 file was updated to correct version!
 
 
-[0.5.1]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.5
+[0.5.1]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.5.1
