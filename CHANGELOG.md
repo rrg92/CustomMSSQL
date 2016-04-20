@@ -11,6 +11,7 @@ This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 - The Changelog.cmdlet.ps1 was added to cmdlets list (Issue #4)
 - The cmdlets following cmdlets are available: Get-CustomMSSQLVersionChangeLog and Get-CustomMSSQLVersions (Issue #4)
 - (Copy-SQLDatabase) Parameter -FindBlockLeaders added
+
 ### Changed
 - The module psd1 file was updated to correct version!
 
