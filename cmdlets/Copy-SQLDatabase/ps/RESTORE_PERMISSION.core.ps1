@@ -2,60 +2,13 @@ param($VALUES)
 
 Log "	Restoring permissions"
 
-$PermissionsList = $VALUES.DESTINATION_INFO.PERMISSIONS
+$PermissionsList 	= $VALUES.DESTINATION_INFO.PERMISSIONS
+
 
 if(!$PermissionsList){
 	Log "	No backed up permissions found. Skipping."
 	return;
 }
-
-Function GetPrincipalCommand {
-	param($principalName,$mappedName,$type) 
-	
-	if($type -eq "DATABASE_ROLE"){
-		return "IF USER_ID('$principalName') IS NULL EXEC('CREATE ROLE [$principalName]')";
-	}
-	
-	else {
-		return "IF USER_ID('$principalName') IS NULL EXEC('CREATE USER [$principalName] FROM LOGIN [$mappedName]') ELSE EXEC('ALTER USER [$principalName] WITH LOGIN = [$mappedName]')";
-	}
-}
-
-Function GetRoleMembershipCommand {
-	param($RoleName,$MemberName)
-	
-	return "EXEC sp_addrolemember '$RoleName','$MemberName';"
-}
-
-Function GetPermissionsCommand {
-	param($Principal,$PermissionName,$State,$SecurableClass,$majorName,$minorName)
-	
-	
-	if(!$SecurableClass){
-		throw "INVALID_SECURABLE_CLASS: $SecurableClass";
-	}
-	
-	if(!$majorName){
-		throw "INVALID_SECURABLE_NAME: $majorName";
-	}
-	
-	$FullSecurableDCL = "ON $($SecurableClass)::$majorName";
-	
-	if($minorName){
-		$FullSecurableDCL += "($minorName)";
-	}
-	
-	if($SecurableClass -eq "DATABASE"){
-		$FullSecurableDCL = ""
-	}
-	
-	
-	
-	$dcl = "$State $PermissionName $FullSecurableDCL TO [$Principal]";
-	
-	return $dcl;
-}
-
 
 try {
 
@@ -63,7 +16,8 @@ try {
 	
 	$PermissionsList.PRINCIPALS| where {$_} | %{
 		try {
-			$tsql = (GetPrincipalCommand $_.principalName $_.serverPrincipal $_.type_desc)
+			$tsql = (. $VALUES.SCRIPT_STORE.SQL.GET_PRINCIPAL_DCL $_.principalName $_.serverPrincipal $_.type_desc)	
+		
 			Log "		Creating the principal ($($_.type_desc)) $($_.principalName) mapped to $($_.serverPrincipal)"
 			Log "		Create principal command: $tsql"
 			& $SQLInterface.cmdexec -S $VALUES.PARAMS.DestinationServerInstance -d $VALUES.PARAMS.DestinationDatabase -Q $tsql -NoExecuteOnSuggest
@@ -77,7 +31,8 @@ try {
 	
 	$PermissionsList.ROLES_MEMBERS | where {$_}  | %{
 		try {
-			$tsql = GetRoleMembershipCommand $_.roleName $_.memberName
+			$tsql = . $VALUES.SCRIPT_STORE.SQL.GET_ROLEMEMBERSHIP_DCL $_.roleName $_.memberName
+			
 			Log "		Adding principal $($_.memberName) to $($_.roleName)"
 			Log "		Role membership command: $tsql"
 			& $VALUES.SQLInterface.cmdexec -S $VALUES.PARAMS.DestinationServerInstance -d $VALUES.PARAMS.DestinationDatabase -Q $tsql -NoExecuteOnSuggest
@@ -91,7 +46,8 @@ try {
 	
 	$PermissionsList.PERMISSIONS | where {$_} | %{
 		try {
-			$tsql = GetPermissionsCommand $_.principalName $_.permission_name $_.PermissionState $_.SecurableClass $_.SecurableName $_.SecurableMinorName
+			$tsql = . $VALUES.SCRIPT_STORE.SQL.GET_PERMISSIONS_DCL $_.principalName $_.permission_name $_.PermissionState $_.SecurableClass $_.SecurableName $_.SecurableMinorName
+			
 			Log "		Permission DCL: $tsql"
 			& $VALUES.SQLInterface.cmdexec -S $VALUES.PARAMS.DestinationServerInstance -d $VALUES.PARAMS.DestinationDatabase -Q $tsql -NoExecuteOnSuggest
 			Log "			SUCCESS!"
@@ -106,7 +62,7 @@ try {
 	
 		$OwnerPrincipal = $PermissionsList.DBO.Owner;
 		try {
-			$tsql = "ALTER AUTHORIZATION ON DATABASE::[$($VALUES.PARAMS.DestinationDatabase)] TO [$OwnerPrincipal]";
+			$tsql = . $VALUES.SCRIPT_STORE.SQL.GET_OWNER_DCL $OwnerPrincipal;
 			Log "		Changing the database owner to $OwnerPrincipal"
 			& $SQLInterface.cmdexec -S $VALUES.PARAMS.DestinationServerInstance -d $VALUES.PARAMS.DestinationDatabase -Q $tsql -NoExecuteOnSuggest
 			Log "			SUCCESS!"
