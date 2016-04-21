@@ -2,7 +2,7 @@
 All important changes to this project will be added to this file!
 This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 
-## [0.5.2]
+## [0.5.2] - 2016-04-20
 ### Added
 - (Copy-SQLDatabase) ExportPermissionsFile parameter was added. It allows specified a file to export permissions collected!
 
@@ -19,4 +19,5 @@ This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 - The module psd1 file was updated to correct version!
 
 
+[0.5.2]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.5.2
 [0.5.1]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.5.1
