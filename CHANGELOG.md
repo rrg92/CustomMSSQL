@@ -2,6 +2,9 @@
 All important changes to this project will be added to this file!
 This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 
+## [0.5.2]
+### Added
+- (Copy-SQLDatabase) ExportPermissionsFile parameter was added. It allows specified a file to export permissions collected!
 
 ## [0.5.1] - 2016-04-20
 ### Added
