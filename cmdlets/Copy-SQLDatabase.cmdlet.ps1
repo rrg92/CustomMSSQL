@@ -62,6 +62,11 @@ Function Copy-SQLDatabase {
 			 #System permissions and user are not considered.
 				[switch]
 				$KeepPermissions = $true
+				
+			,#Dump de DCL of permissions backed up to the specified file.
+			 #It is useful if the restore fails in middle of process.
+				[string]
+				$ExportPermissionsFile = $null
 			
 		#BACKUP OPTIONS
 			,#The folder where backup are be taken. Can be share. 
@@ -1033,7 +1038,7 @@ Function Copy-SQLDatabase {
 			}
 		}
 			
-			
+		
 		if($KeepPermissions -and $VALUES.DESTINATION_INFO.DatabaseExists){
 			Log "	The backed up permissions are going to restore"
 			
