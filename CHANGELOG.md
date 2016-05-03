@@ -2,6 +2,16 @@
 All important changes to this project will be added to this file!
 This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 
+## [0.6.0] - 2016-04-20
+### Added
+- (Invoke-NewQuery) Description updated. The definitions of special output and notifications was added.
+- (Invoke-NewQuery) MaxVersion parameter was added. Now, a maximum version can be specified. Check parameter help using Get-Help for more information.
+- (Invoke-NewQuery) ForceSpecialOutput parameter was added. Check help for more details.
+- (Invoke-NewQuery) Notifications engine was added. Now, the cmdlet can generate some notifications stored in internal connection info cmdlet. ForceSpecialOutput can be used to get access to notifications text.
+- (Invoke-NewQuery) Added supported properties of special output.
+- (Invoke-NewQuery) Added support for pipe server name via string array. 
+
+
 ## [0.5.2] - 2016-04-20
 ### Added
 - (Copy-SQLDatabase) ExportPermissionsFile parameter was added. It allows specified a file to export permissions collected!
