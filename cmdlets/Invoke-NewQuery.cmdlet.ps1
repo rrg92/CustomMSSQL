@@ -511,6 +511,7 @@ Function Invoke-NewQuery  {
 	[CmdLetBinding()]
 	param(	
 			#This is the Server instance. Can be ip address, ip and port, name\instance, etc.
+				[parameter(Mandatory=$false, ValueFromPipeline=$true)]
 				$ServerInstance = $null
 			
 			,#This is the Database name that you want connect to.
@@ -534,7 +535,7 @@ Function Invoke-NewQuery  {
 			 #Check this technet article to more details: https://technet.microsoft.com/en-us/library/ms175088(v=sql.105).aspx
 			 #By default, the cmdlet will execute some "SET" commands before executing the user query, on same connection opened.
 			 #If you specify this option, the cmdlet will not execute this set options.
-				[Switch]$NoFixSetOptions
+				[Switch]$NoFixSetOptions = $false
 				
 			,#Specify some additional connection strings parameters that you can use.
 				$exString = ""
@@ -561,12 +562,26 @@ Function Invoke-NewQuery  {
 			 #The script will try connect to target instance and get version...
 			 #If version returned is less thant this parameter, the script is not execubtale.
 			 #The min version must be specified in format MAJOR.MINOR.BUILD or a numeric value represting it.
-			 #If cmdlet cannot obtain instance version, the exception CANNOT_GET_MINVERSION is throwed!
+			 #If cmdlet cannot obtain instance version, the exception CANNOT_GET_VERSION is throwed!
+			 #Check the notifications of special output or verbose logging for reason of incompatible version.
 				$MinVersion = $null
+				
+			,#Specify the maximum version required by server for script run.
+			 #This will follow the same rules that MinVersion parameter.
+			 #Note that build versions is considered. For example, a server with version 10.50.6000 cannot will execute if this parameter is 10. 
+			 #If you want execute on all server with maximum version 10.50 (sql 2008 r2) you must specify 10.50.9999. If you wan on sql 2008 only, you can specify 10.00.9999
+				$MaxVersion = $null
 				
 			,#BETA! Executes sp_whoisactive @find_block_leaders = 1,@sort_order = '[blocked_session_count] DESC'
 			 #The sp_whoisactive must exists and user must have permissions to run it.
-			 [switch]$FindBlockers = $false
+				[switch]
+				$FindBlockers = $false
+			 
+			,#By default, when this cmdlet executes for multiple server, it returns a special object array containing results and errors for each server.
+			 #When it execute on a single server, it return the direct resultset or errors, if any.
+			 #If this parameter is specified, the output of cmdlet is always the object array,  independently of number of server.
+				[switch]
+				$ForceSpecialOutput = $false
 	)
 	
 begin {
@@ -577,14 +592,19 @@ begin {
 		$NumericMinVersion = GetProductVersionNumeric $MinVersion;
 	}
 	
+	if($MaxVersion){
+		$NumericMaxVersion = GetProductVersionNumeric $MaxVersion;
+	}
 }
 
 process {
 	
-	$Conexao = New-Object PSObject -Prop (GetAllCmdLetParams)
-	$Conexao | Add-Member -Type Noteproperty -Name Results -Value $null 
-	$Conexao | Add-Member -Type Noteproperty -Name Errors -Value @()
-	$AllConnections += $Conexao;
+	$ConexInfo = New-Object PSObject -Prop (GetAllCmdLetParams)
+	$ConexInfo | Add-Member -Type Noteproperty -Name Results -Value $null 
+	$ConexInfo | Add-Member -Type Noteproperty -Name Errors -Value @()
+	$ConexInfo | Add-Member -Type Noteproperty -Name Notifications -Value @()
+	$ConexInfo | Add-Member -Type Noteproperty -Name ConnectionInfo -Value $ConexInfo;
+	$AllConnections += $ConexInfo;
 }
 	
 end {
@@ -595,42 +615,47 @@ end {
 		$isMultiple = $true;
 	}
 	
-	:ConexoesLoop foreach($Conexao in $AllConnections){
+	:ConexoesLoop foreach($ConexInfo in $AllConnections){
 
-		if($Conexao.connectionName -and !$conexao.serverInstance){
-			$Conexao.ServerInstance = $Conexao.connectionName;
+		#If the ServerInstance contains a object with a property connectionName...
+		if($ConexInfo.ServerInstance.connectionName){
+			$ConexInfo.ServerInstance = $ConexInfo.ServerInstance.connectionName;
 		}
 		
-		if($Conexao.Login){
-			$Conexao.logon = @{
+		elseif($ConexInfo.connectionName -and !$ConexInfo.serverInstance){
+			$ConexInfo.ServerInstance = $ConexInfo.connectionName;
+		}
+		
+		if($ConexInfo.Login){
+			$ConexInfo.logon = @{
 					AuthType = "SQL"
 					User=$Login
 					Password=$Password
 				}
 		}
 		
-		if(!$Conexao.ServerInstance)
+		if(!$ConexInfo.ServerInstance)
 		{
 			$ex = New-Object System.Exception("You must provide a server instance");
 			if($isMultiple){
-				$Conexao.Errors += $ex
+				$ConexInfo.Errors += $ex
 				continue :ConexoesLoop;
 			} else {
 				throw $ex;
 			}
 		}
 
-		$Query = $Conexao.Query;
-		if($Conexao.InputFile){
+		$Query = $ConexInfo.Query;
+		if($ConexInfo.InputFile){
 			
-			if(Test-Path $Conexao.InputFile)
+			if(Test-Path $ConexInfo.InputFile)
 			{
-				$Query = (Get-Content $Conexao.InputFile) -Join "`r`n"
+				$Query = (Get-Content $ConexInfo.InputFile) -Join "`r`n"
 			} else {
 				$ex = New-Object System.Exception( "Invalid File: $InputFile");
 				
 				if($IsMultiple){
-					$Conexao.Errors += $ex
+					$ConexInfo.Errors += $ex
 					continue :ConexoesLoop;
 				} else {
 					throw $ex;
@@ -647,7 +672,7 @@ end {
 			$ex = New-Object System.Exception( "Invalid Query");
 			
 			if($IsMultiple){
-				$Conexao.Errors += $ex
+				$ConexInfo.Errors += $ex
 				continue :ConexoesLoop;
 			} else {
 				throw $ex;
@@ -670,27 +695,47 @@ end {
 			$NewQuery = $null;
 			$NumericServerVersion = $null; #This will store the target server numeric version.
 			
-			$NewQuery = New-MSSQLSession -serverInstance $Conexao.ServerInstance -database $Conexao.database -Logon $Conexao.logon -appName $Conexao.appName -exString $Conexao.exString
+			$NewQuery = New-MSSQLSession -serverInstance $ConexInfo.ServerInstance -database $ConexInfo.database -Logon $ConexInfo.logon -appName $ConexInfo.appName -exString $ConexInfo.exString
 		
-			#Try  get the minimum version if is was specified!
-			if($Conexao.MinVersion -ne $null){
+			#Try get maximum version if specified.
+			if($ConexInfo.MinVersion -ne $null -or $ConexInfo.MaxVersion -ne $null){
+			
+				
+				$CompatibleVersion = $true;
+				$IncompatibilityReason = @()
+			
 				try {
 					$QueryResult = $NewQuery.execute("SELECT SERVERPROPERTY('ProductVersion') as ProductVersion");
 					$NumericServerVersion =  GetProductVersionNumeric $QueryResult.ProductVersion;
 				} catch {
-					throw "CANNOT_GET_MINVERSION: $_"
+					throw "CANNOT_GET_VERSION: $_"
 				}
 				
-				if($NumericServerVersion -lt $NumericMinVersion){
-					write-verbose "Ignoring query execution because Minimum Version. Required:$NumericMinVersion Current:$NumericServerVersion"
-					$Conexao.Results = $null
+				#Check if version is compatible!
+				if($NumericMinVersion -and $NumericServerVersion -lt $NumericMinVersion){
+					$CompatibleVersion = $false;
+					$IncompatibilityReason = "Current version < Min Version"
+				}
+				
+				if($NumericMaxVersion -and $NumericServerVersion -gt $NumericMaxVersion){
+					$CompatibleVersion = $false;
+					$IncompatibilityReason = "Current version > Min Version"
+				}
+				
+				if(!$CompatibleVersion){
+					$ReasonText = $IncompatibilityReason -join "`r`n";
+					$Message = "Ignoring query execution because version. Required min:$NumericMinVersion max:$NumericMaxVersion Current:$NumericServerVersion. Reasons: $ReasonText";
+					write-verbose $Message 
+					$ConexInfo.Results = $null;
+					$ConexInfo.Notifications += $Message;
 					continue :ConexoesLoop;
 				}
+				
 			}
 			
 			
 			
-			if(!$Conexao.NoFixSetOptions){
+			if(!$ConexInfo.NoFixSetOptions){
 				try {
 					write-verbose ("Fixing the SET OPTIONS: "+$FIX_SET_OPTIONS)
 					$NewQuery.execute($FIX_SET_OPTIONS) | Out-Null
@@ -702,12 +747,12 @@ end {
 
 			
 			$resultset = $NewQuery.execute($Query)
-			$Conexao.Results = $resultset;
+			$ConexInfo.Results = $resultset;
 		} catch {
 			$ex = $_;
 			
 			if($IsMultiple){
-				$Conexao.Errors += $ex
+				$ConexInfo.Errors += $ex
 				continue :ConexoesLoop;
 			} else {
 				throw $ex;
@@ -720,7 +765,7 @@ end {
 	
 	}
 	
-	if($IsMultiple){
+	if($IsMultiple -or $ForceSpecialOutput){
 		return $AllConnections
 	} else {
 		return $AllConnections[0].Results;
@@ -732,7 +777,7 @@ end {
 			Connects to SQL Server instance and execute a query, using .NET System.Data.SqlClient library.
 			
 		.DESCRIPTION
-			This cmdlet is a rewrite of Invoke-SqlCmd and Sqlcmd. This is a more lightweight and customized version.
+			This cmdlet is a rewrite of Invoke-SqlCmd and Sqlcmd.
 			It is build on top of "New-MSSQLSession" cmdlet provided by CustomMSSQL for executing queries without session control.
 			
 			The cmdlet returns the first resultset only as a array of objects.
@@ -743,6 +788,41 @@ end {
 			
 			The cmdlet provide some parameters that have same name in the Invoke-Sqlcmd (from sqlps module).
 			This is for compatibility reasons. But it provides more alternatives and options. Check parameters documentation for more information.
+			
+			You can pipe output of Get-InstanceByProperty cmdlet in this modudle. This cmdlet is compatible.
+			When this cmdlet execute in multiple servers, it returns the results in a special output. Check OUTPUT AND SPECIAL OUTPUT section. 
+			
+			You also can pipe server names as a string array.
+			
+			
+			OUTPUTS AND SPECIAL OUTPUT
+				In some situations, the cmdlet will return a simple output containing the resultset.
+				This is default behavior when cmdlet execute on just a single isntance.
+				If parameter ForceSpecialOutput or multiple servers are used, the cmdlet will return a special output.
+				The special output is a object array containing execution results for each instance the cmdlet tried execute the query.
+				The special output can present many properties and informations, but just descrbied here will be supported and compatibility is guaranted.
+				
+				The special output supported properties is:
+				
+					
+					ConnectionInfo
+						This is a object containing the properties that are the parameters and values passed to the cmdlet.
+						
+					Results
+						Will contains the resultset.
+						
+					Errors
+						Will contains the errors generate by execution on that server.
+						
+					Notifications
+						Will contains the notifications generated by cmdlet.
+						Check NOTIFICATIONS section for more information.
+
+			NOTIFICATIONS
+				This cmdlet can generate some useful messages to debug a error or not expected result.
+				The notifications is available on special output via property notifications.
+				For example, when cmdlet not execute script because MaxVersion or MinVersion parameters, the reason will be placed on notifications.
+					
 		
 		.EXAMPLE
 			
