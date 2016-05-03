@@ -2,7 +2,7 @@
 All important changes to this project will be added to this file!
 This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 
-## [0.6.0] - 2016-04-20
+## [0.6.0] - 2016-05-03
 ### Added
 - (Invoke-NewQuery) MaxVersion parameter was added. Now, a maximum version can be specified. Check parameter help using Get-Help for more information.
 - (Invoke-NewQuery) ForceSpecialOutput parameter was added. Check help for more details.
