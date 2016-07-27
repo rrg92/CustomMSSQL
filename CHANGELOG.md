@@ -2,6 +2,13 @@
 All important changes to this project will be added to this file!
 This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 
+## [0.6.2] - 2016-07-27
+### Added
+- (Invoke-NewQuery) Added beta versions of Invoke-NewQuery (Invoke-NewQueryBeta) that now can process messages and multiple resultsets! 
+- (Invoke-NewQuery) Created the NewDataReaderParser for manage reader operations...
+### Changed
+- (Invoke-NewQuery) Improve perfomance on reading results from sql server. 
+
 ## [0.6.1] - 2016-05-16
 ### Added
 - (Copy-SQLDatabase) Before restoring the database, ALTER DATABASE SET OFFLINE/ONLINE will be raised in order to guarantee that all connections will be removed.
