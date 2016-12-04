@@ -43,6 +43,8 @@ Function Send-SQL2Zabbix {
 		
 		,#Specifies log level.
 			$LogLevel = "DETAILED"
+			
+		,#Specifies app name to be used in sql
 	)
 
 $ErrorActionPreference = "stop";
@@ -109,7 +111,7 @@ $ErrorActionPreference = "stop";
 	$HostNameScript = {
 			param($VALUES)
 			
-			$InstanceName = Invoke-NewQuery -ServerInstance $Instance -Query "SELECT @@SERVERNAME as FullServerName" -AppName "SQL2ZABBIX";
+			$InstanceName = Invoke-NewQuery -ServerInstance $Instance -Query "SELECT @@SERVERNAME as FullServerName" -AppName $SQLAppName;
 			$VALUES.HOSTNAME = $InstanceName.FullServerName.replace("\"," ");
 			$VALUES.USER.INSTANCE_NAME = $InstanceName.FullServerName;
 		}
