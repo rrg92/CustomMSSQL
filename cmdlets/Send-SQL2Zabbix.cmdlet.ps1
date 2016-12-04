@@ -45,6 +45,7 @@ Function Send-SQL2Zabbix {
 			$LogLevel = "DETAILED"
 			
 		,#Specifies app name to be used in sql
+			$SQLAppName="SQL2ZABBIX"
 	)
 
 $ErrorActionPreference = "stop";
