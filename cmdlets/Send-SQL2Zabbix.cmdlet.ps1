@@ -306,7 +306,7 @@ do {
 		Log "		Executing source for key $($k.KEY)" "VERBOSE"
 		try {
 			if($k.SOURCE.TYPE -eq "SQL"){
-				$queryResults = Invoke-NewQuery -ServerInstance $Instance -Query $k.SOURCE.QUERY -AppName "SQL2ZABBIX"
+				$queryResults = Invoke-NewQuery -ServerInstance $Instance -Query $k.SOURCE.QUERY -AppName $SQLAppName
 			}
 			elseif($k.SOURCE.TYPE -eq "PS") {
 				$queryResults = @(& $k.SOURCE.SCRIPT $VALUES)
