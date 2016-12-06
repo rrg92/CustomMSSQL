@@ -54,7 +54,7 @@ $Command = "
 	COMMIT;
 "
 
-& $VALUES.SCRIPT_STORE.FUNCTIONS.Log " LimitedPolicy is: $LimitedUserPolicy" "DETAILED"
-& $VALUES.SCRIPT_STORE.FUNCTIONS.Log " CreateLimitedUserCommand: $Command"
+$Log | Log "LimitedPolicy is: $LimitedUserPolicy" "DETAILED"
+$Log | "CreateLimitedUserCommand: $Command"
 
 return $Command;

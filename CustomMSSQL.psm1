@@ -1,4 +1,4 @@
-param($CmdLetsDir = ".\cmdlets", $AuxDir = ".\helpers")
+param($CmdLetsDir = ".\cmdlets", $AuxDir = ".\helpers", $ModulesDir = ".\modules")
 
 #For detailed informations about structure and internals about this code check !Help.txt file in module root directory.
 
@@ -20,6 +20,7 @@ $FunctionsToExport = @()
 $GMV = @{MODULE_ROOT=$ModuleRoot; PSM_PATH=$ModulePsm};
 $GMV.add("CMDLETSIDR",(Resolve-Path $CmdLetsDir))
 $GMV.add("AUXDIR",(Resolve-Path $AuxDir))
+$GMV.add("MODULESDIR",(Resolve-Path $ModulesDir).Path)
 $GMV.add("CHANGELOGFILE",(Resolve-Path ".\CHANGELOG.md"))
 $GMV.add("VARS",@{})
 

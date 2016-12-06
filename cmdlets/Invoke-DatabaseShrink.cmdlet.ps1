@@ -30,8 +30,7 @@ Function Invoke-DatabaseShrink {
 		$L.LogTo = $LogTo;
 		$L.LogLevel = $LogLevel; 
 		$L.ExternalVerboseMode = $IsVerbose; 
-		
-		
+
 		$L | Invoke-Log "Script Starting!" "PROGRESS";
 		
 		#This contains all values shared by entire script. 
@@ -87,10 +86,50 @@ Function Invoke-DatabaseShrink {
 			#Replace filter, if there are
 			
 			if($FilterWhere){
-				$Filter = "WHERE ($FilterWhere)"
-				$GetFilesQuery = $GetFilesQuery.replace("--<WHERE_FILTER>",$Filter);
+				$FinalFilter = @();
+				
+				if($FilterWhere -is [hashtable]){
+					$L | Invoke-Log "Filter where is a hashtable." "VERBOSE"
+					
+					$SQLCommands = @(
+						"IF OBJECT_ID('tempdb..#ServerFilter') IS NOT NULL DROP TABLE #ServerFilter"
+						"CREATE TABLE #ServerFilter (Filter nvarchar(max))"
+					)
+				
+					$FilterWhere.GetEnumerator() | %{
+						$ServerInstanceFilter = $_.Key;
+						$SQLCommands += "INSERT INTO #ServerFilter VALUES('$ServerInstanceFilter')";
+					}
+					
+					$SQLCommands += "SELECT SF.Filter FROM #ServerFilter SF WHERE @@SERVERNAME like SF.Filter";
+					
+					$Script = $SQLCommands -join "`r`n";
+					
+					$L | Invoke-Log "Executing the script: $Script" "VERBOSE";
+					$MatchingFilters = Invoke-NewQuery -ServerInstance $VALUES.PARAMS.ServerInstance -Query $Script -Logon $VALUES.SQL_LOGON;
+					
+					if($MatchingFilters){
+						$MatchingFilters | %{
+							$L | Invoke-Log "Was matched: $($_.Filter)" "VERBOSE";
+							$FilterString = $FilterWhere.Item($_.Filter);
+							$FinalFilter += "($FilterString)"
+						} 
+						
+						$FinalFilter = $FinalFilter -join "`r`n OR "
+					}
+					
+				} else {
+					$FinalFilter = $FilterWhere;
+				}
+				
+				IF($FinalFilter){
+					$L | Invoke-Log "Final filter: $FinalFilter" "VERBOSE";
+					$Filter = "WHERE ($FinalFilter)"
+					$GetFilesQuery = $GetFilesQuery.replace("--<WHERE_FILTER>",$Filter);
+				}
 			}
 			
+			$L | Invoke-Log "Get Files query: $GetFilesQuery" "VERBOSE";
 			$FileList = Invoke-NewQuery -ServerInstance $VALUES.PARAMS.ServerInstance -Query $GetFilesQuery -Logon $VALUES.SQL_LOGON
 			$L | Invoke-Log "	Success! File count: $($FileList.count)";
 		} catch {
@@ -171,6 +210,11 @@ Function Invoke-DatabaseShrink {
 			KNOW ISSUES
 				
 			WHAT'S NEW
+			
+		.CHANGELOG
+		
+			160826
+				- Enchanced FilterWhere. Now is possible to use a hashtable filter.
 
 	#>
 }	

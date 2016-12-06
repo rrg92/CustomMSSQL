@@ -1,0 +1,32 @@
+#Changelog 160823
+	- Changed the way how SBA end main loop (new "determined" property)
+	- Fixed bugs in suggestonly
+
+#Changelog 160822
+	- Separated the core script load routine. Added the file LOAD_CORE.core.ps1
+	- Separated the dfa script load routine. Added the file LOAD_DFA.core.ps1
+	- Separated the sql scripts load routine. Added the file LOAD_SQL_SCRIPTS.core.ps1
+	- Separated the SBA scripts load routine. Added the file LOAD_SBA.core.ps1
+	- Separated the SQL interface load routine. Added the file LOAD_SQLINTERFACE.core.ps1
+	- Added the predetermined connection functionalilty
+	- Moved AVA to a loop
+
+	
+#Changelog 160811
+	- Changed the way how permissions are reapplied.
+	- Changed the application name on sql connections
+
+#Change log 160808
+	- Added support for SQL Login on SQL Source and Destination
+	- Fixed logon problem in Invoke-NewQuery
+
+#Change log 160805
+	- Added sessions list output before kill sessions...
+		. GET_CONNECTIONS.ps1
+		. LogObject added method canLog
+		. Changed way how log level check if can log
+
+#Change log 160803
+	- added some alias.
+	- changed KeepPermissions to NoKeepPermissions
+

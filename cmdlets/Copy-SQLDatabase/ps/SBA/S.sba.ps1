@@ -9,35 +9,43 @@
 	SCRIPT = {
 		param($VALUES)
 		
+			#Creates the object that represent SBA.
+			$SBA = (NewSourceBackup);
+			
+			#If in suggest mode, return immeditally.
+			if($VALUES.PARAMS.SuggestOnly){
+				$SBA.determined=$true
+				return $SBA;
+			}
 			
 			$SourceServerInstance = $VALUES.PARAMS.SourceServerInstance;
 			$SourceDatabase = $VALUES.PARAMS.SourceDatabase;
 			$SourceReadOnly = $VALUES.PARAMS.SourceReadOnly;
-			$LogFn = $VALUES.SCRIPT_STORE.FUNCTIONS.Log;
+			$SourceLogonInfo = $VALUES.SOURCE_SQL_LOGON
 			
 		
-			& $LogFn "		Generating a new database backup of $SourceDatabase in $SourceServerInstance"
+			$Log | Log "Generating a new database backup of $SourceDatabase in $SourceServerInstance"
 			
 			if($SourceReadOnly){
-				& $LogFn "		Source Database will be put in READ_ONLY before backup."
+				$Log | Log "Source Database will be put in READ_ONLY before backup." -RaiseIdent -ApplyThis
 				$ReadOnlyCommand =  . $VALUES.SCRIPT_STORE.SQL.PUT_DATABASE_READONLY $VALUES
-				& $LogFn "			ReadOnly command: $ReadOnlyCommand"
-				$results = & $VALUES.SQLINTERFACE.cmdexec -S $SourceServerInstance -d master -Q $ReadOnlyCommand -NoExecuteOnSuggest
+				$Log | Log "ReadOnly command: $ReadOnlyCommand"
+				$results = & $VALUES.SQLINTERFACE.cmdexec -On SOURCE -d master -Q $ReadOnlyCommand -NoExecuteOnSuggest -AppNamePartID "SBA_S_READONLY"
+				$Log.dropIdent();
 			}
 				
 			
 			$BackupCommand =  . $VALUES.SCRIPT_STORE.SQL.BACKUP_DATABASE $VALUES
 				
-			& $LogFn "		Backup command: $BackupCommand"
+			$Log | Log "Backup command: $BackupCommand"
 			
-			$results = & $VALUES.SQLINTERFACE.cmdexec -S $SourceServerInstance -d master -Q $BackupCommand -NoExecuteOnSuggest
-			$SBA = (NewSourceBackup)
+			$results = & $VALUES.SQLINTERFACE.cmdexec -On SOURCE -d master -Q $BackupCommand -NoExecuteOnSuggest -AppNamePartID "SBA_S_BACKUP"
+			
 			
 			if($results){
-				$backupFile = $results.backupfile
-				$SBA.fullPath = $backupfile;
+				$SBA.fullPath = $results.backupfile;
+				$SBA.determined=$true;
 			}
-				
 
 			return $SBA;
 	}

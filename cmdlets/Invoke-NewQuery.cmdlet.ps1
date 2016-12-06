@@ -546,6 +546,7 @@ Function Invoke-NewQuery  {
 			 #If this parameter is specified, the output of cmdlet is always the object array,  independently of number of server.
 				[switch]
 				$ForceSpecialOutput = $false
+				
 	)
 	
 begin {
@@ -589,6 +590,7 @@ end {
 		elseif($ConexInfo.connectionName -and !$ConexInfo.serverInstance){
 			$ConexInfo.ServerInstance = $ConexInfo.connectionName;
 		}
+		
 		
 		if($ConexInfo.Login){
 			$ConexInfo.logon = @{
@@ -659,7 +661,9 @@ end {
 			$NewQuery = $null;
 			$NumericServerVersion = $null; #This will store the target server numeric version.
 			
-			$NewQuery = New-MSSQLSession -serverInstance $ConexInfo.ServerInstance -database $ConexInfo.database -Logon $ConexInfo.logon -appName $ConexInfo.appName -exString $ConexInfo.exString
+
+			$ConexLogon = @{AuthType=$ConexInfo.logon.AuthType; User=$ConexInfo.logon.User; Password=$ConexInfo.logon.Password};
+			$NewQuery = New-MSSQLSession -serverInstance $ConexInfo.ServerInstance -database $ConexInfo.database -Logon $ConexLogon -appName $ConexInfo.appName -exString $ConexInfo.exString
 		
 			#Try get maximum version if specified.
 			if($ConexInfo.MinVersion -ne $null -or $ConexInfo.MaxVersion -ne $null){
@@ -1651,8 +1655,9 @@ end {
 			$NewQuery = $null;
 			$NumericServerVersion = $null; #This will store the target server numeric version.
 			
-			$NewQuery = New-MSSQLSessionBeta -serverInstance $ConexInfo.ServerInstance -database $ConexInfo.database -Logon $ConexInfo.logon -appName $ConexInfo.appName -exString $ConexInfo.exString
-		
+			$ConexLogon = @{AuthType=$ConexInfo.logon.AuthType; User=$ConexInfo.logon.User; Password=$ConexInfo.logon.Password};
+			$NewQuery = New-MSSQLSessionBeta -serverInstance $ConexInfo.ServerInstance -database $ConexInfo.database -Logon $ConexLogon -appName $ConexInfo.appName -exString $ConexInfo.exString
+
 			#Try get maximum version if specified.
 			if($ConexInfo.MinVersion -ne $null -or $ConexInfo.MaxVersion -ne $null){
 			

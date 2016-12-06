@@ -21,7 +21,7 @@ OPEN curDatabaseSessions; FETCH NEXT FROM curDatabaseSessions INTO @tsql;
 		EXEC(@tsql); FETCH NEXT FROM curDatabaseSessions INTO @tsql;
 	END
 
-IF DB_ID('$DestinationDatabase') IS NOT NULL
+IF DB_ID('$DestinationDatabase') IS NOT NULL AND DATABASEPROPERTYEX('$DestinationDatabase','Status') = 'ONLINE'
 BEGIN
 	EXEC('ALTER DATABASE [$DestinationDatabase] SET OFFLINE WITH ROLLBACK IMMEDIATE');
 	EXEC('ALTER DATABASE [$DestinationDatabase] SET ONLINE');

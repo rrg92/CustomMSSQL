@@ -12,7 +12,7 @@ LONG DESCRIPTION
 	
 	GENERAL INFORMATION
 	
-		The Log allows you loggin by proiding a Object with properties and methods for interacting with it facilities.
+		The Log allows you logging by proiding a Object with properties and methods for interacting with it facilities.
 		In simple case, you calls the functions GetLogObject and stores it on variable. Its returns a object that represents a instance of The Log.
 		After this, you can call method "log" and provide a message. After that, log engine will do the work.
 		

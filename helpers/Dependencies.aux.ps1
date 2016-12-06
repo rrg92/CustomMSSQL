@@ -1,5 +1,4 @@
 #Finds most recent version of SMO and loads it
-
 Function LoadSMO {
 	$ErrorActionPreference = "Stop";
 	
@@ -64,4 +63,21 @@ Function LoadSMO {
 	}
 	#>
 
+}
+
+
+Function ImportDependencieModule {
+	param($ModuleName,[hashtable]$ExtraArgs = @{})
+
+	$g = GetGMV;
+	$modulesDir = $g.MODULESDIR
+	
+	$FullPathToModule = $modulesDir + "\" + $ModuleName;
+	
+	$Params = @{
+		Name = $FullPathToModule
+	} + $ExtraArgs;
+	
+	write-verbose "ImportDependencieModule: Importing... $($Params.Name)";
+	import-module @Params;
 }

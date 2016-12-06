@@ -17,6 +17,6 @@ $Command = "
 	COMMIT;
 "
 
-& $VALUES.SCRIPT_STORE.FUNCTIONS.Log " DropLimitedUserCommand: $Command"
+$Log | Log "DropLimitedUserCommand: $Command"
 
 return $Command;

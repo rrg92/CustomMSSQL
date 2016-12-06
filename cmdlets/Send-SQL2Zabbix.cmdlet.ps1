@@ -43,9 +43,6 @@ Function Send-SQL2Zabbix {
 		
 		,#Specifies log level.
 			$LogLevel = "DETAILED"
-			
-		,#Specifies app name to be used in sql
-			$SQLAppName="SQL2ZABBIX"
 	)
 
 $ErrorActionPreference = "stop";
@@ -112,7 +109,7 @@ $ErrorActionPreference = "stop";
 	$HostNameScript = {
 			param($VALUES)
 			
-			$InstanceName = Invoke-NewQuery -ServerInstance $Instance -Query "SELECT @@SERVERNAME as FullServerName" -AppName $SQLAppName;
+			$InstanceName = Invoke-NewQuery -ServerInstance $Instance -Query "SELECT @@SERVERNAME as FullServerName" -AppName "SQL2ZABBIX";
 			$VALUES.HOSTNAME = $InstanceName.FullServerName.replace("\"," ");
 			$VALUES.USER.INSTANCE_NAME = $InstanceName.FullServerName;
 		}
@@ -306,7 +303,7 @@ do {
 		Log "		Executing source for key $($k.KEY)" "VERBOSE"
 		try {
 			if($k.SOURCE.TYPE -eq "SQL"){
-				$queryResults = Invoke-NewQuery -ServerInstance $Instance -Query $k.SOURCE.QUERY -AppName $SQLAppName
+				$queryResults = Invoke-NewQuery -ServerInstance $Instance -Query $k.SOURCE.QUERY -AppName "SQL2ZABBIX"
 			}
 			elseif($k.SOURCE.TYPE -eq "PS") {
 				$queryResults = @(& $k.SOURCE.SCRIPT $VALUES)

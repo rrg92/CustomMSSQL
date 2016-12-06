@@ -6,7 +6,7 @@ if($Replace){
 }
 
 $NoRecoveryOption = ""
-if($VALUES.PARAM.NoRecovery){
+if($VALUES.PARAMS.NoRecovery){
 	$NoRecoveryOption = ",NORECOVERY"
 }
 

@@ -1,30 +1,30 @@
 param($VALUES)
 
 if($VALUES.PARAMS.BackupTSQL){
-	Log "	Was specified a T-SQL Backup command."
+	$Log | Log "Was specified a T-SQL Backup command."
 	return $VALUES.PARAMS.BackupTSQL;
 }
 
 $ServerInfoCommand = . $VALUES.SCRIPT_STORE.SQL.GET_INSTANCE_INFO $VALUES
 
-Log "	Getting source SQL info"
-Log "	Source Info Command: $ServerInfoCommand"
-$SourceSQLInfo 	= . $SQLInterface.cmdexec -S $VALUES.PARAMS.SourceServerInstance -D master -Q $ServerInfoCommand
+$Log | Log "Getting source SQL info"
+$Log | Log "Source Info Command: $ServerInfoCommand"
+$SourceSQLInfo 	= . $SQLInterface.cmdexec -On SOURCE -D master -Q $ServerInfoCommand -AppName "SQL_BACKUPDATABASE_SOURCEINFO"
 $SrcVersion		=  GetProductVersionNumeric $SourceSQLInfo.ProductVersion;
 
-Log "	Source Server Version is: $SrcVersion"
+$Log | Log "Source Server Version is: $SrcVersion"
 
 $TSQL_Compression = ",COMPRESSION"
 
 if($SrcVersion -lt 10){
-	Log "	COMPRESSION unsupported!"
+	$Log | Log "COMPRESSION unsupported!"
 	$TSQL_Compression = ""
 }
 
 $TSQL_CopyOnly = ",COPY_ONLY"
 
 if($SrcVersion -le 8){
-	Log "	COPY_ONLY unsupported!"
+	$Log | Log "COPY_ONLY unsupported!"
 	$TSQL_CopyOnly = ""
 }
 
@@ -39,7 +39,7 @@ if($UniqueBackupName){
 }
 
 $FullDestinationPath = $BackupFolder+$BackupFileName
-Log "		Destination backup file will be: $FullDestinationPath"
+$Log | Log "Destination backup file will be: $FullDestinationPath"
 
 $BackupCommand = "
 	BACKUP DATABASE

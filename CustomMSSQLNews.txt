@@ -1,0 +1,21 @@
+Asynchornous execution of queries!
+
+	The Invoke-NewQuery accepts -Async parameter
+	The cmdlet will setup and begin execution of query!
+	It returns a object containing all data pertinent to async execuution!
+		$AsyncHandle = Invoke-NewQuery -ServerInstance MyInstance -Query "SELECT @@SERVERNAME" -Async
+	
+	
+	New cmdlets!!!
+	The Get-QueryResults have the -Handle paramater that identifier the asyync execution.
+	It have option -Wait that specified amount of time to wait for a results. User can put into a infinite waitstate up to results are take.
+	The output is the special output. A special property, called Status will indicate the status of operation: completed, running.
+	Completed indicates that all batches processed. Running indicates that there are some running batch in the session.
+	
+		$SpecialResults = Get-QueryResults -Handle $Aysnchandle -Wait 1000
+		
+		
+	
+	#Free resources!
+		Remove-AsyncHandle
+		

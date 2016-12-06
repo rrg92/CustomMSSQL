@@ -95,14 +95,31 @@ Function GetAllCmdLetParams {
 
 #Convert a PsCustomOject to hashtable!!!
 Function Object2HashString {
-	param($Objects)
+	param($Objects, [switch]$Expand = $false, [switch]$PureHashTables = $false)
 
 	$ALLObjects = @()
+	
 	foreach($object in $Objects){
 		$PropsString = @()
 		
+		#if users wants expand and treat hashtable as a object, then convert it to a property of a object...
+		if($object -is [hashtable] -and $Expand -and !$PureHashTables){
+			$object = (New-Object PSObject -Prop $Object);
+		}
+		
 		foreach($Prop in $Object.psobject.properties) { 
-			$PropsString += "$($Prop.Name)=$($Prop.Value)"
+			$PropValue = $Prop.Value;
+
+			if( ($PropValue -is [psobject] -or ($PropValue -is [hashtable] -and !$PureHashTables)) -and $Expand){
+				$Params = @{Object=$PropValue;Expand=$Expand;PureHashTables=$PureHashTables}
+				$PropValue  = Object2HashString @Params;
+			} else {
+				if($PropValue){
+					$PropValue = $PropValue.toString()
+				}
+			}
+			
+			$PropsString	 += "$($Prop.Name)=$($PropValue)";
 		}
 		
 		$ALLObjects += "@{"+($PropsString -join ";")+"}"

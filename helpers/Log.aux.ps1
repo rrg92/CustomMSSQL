@@ -116,7 +116,7 @@ Function GetLogObject {
 
 				#Check destinations...
 
-				if( (GetLogLevelNumber($LogPacket.level)) -le (GetLogLevelNumber($this.LogLevel)) )  { #If actual level <= required level.
+				if( $this.canLog($LogPacket.level) )  { #If actual level <= required level.
 				
 					if($this.internal.RETAINING){
 						$this.internal.RETAINED_LOG_PACKETS += $LogPacket;
@@ -208,11 +208,23 @@ Function GetLogObject {
 				
 				return $IsVerbose;
 			}).GetNewClosure()
+			
+			
+		#Test if log object can log on specific log level...
+		#It is useful for the user execute some codes only if a specific log level is active...
+		$canLog = [scriptblock]::create({
+				param($LogLevel)
 		
+				#If desired level <= max level, then return true.
+				$can = (GetLogLevelNumber($LogLevel)) -le (GetLogLevelNumber($this.LogLevel))
+				return $can;
+			})
+			
 	$o | Add-Member -Type ScriptMethod -Name Log -Value  $LogMethod;
 	$o | Add-Member -Type ScriptMethod -Name LogEx -Value  $LogMethodEx;
 	$o | Add-Member -Type ScriptMethod -Name LogSQLErrors -Value  $LogSQLErrors;
 	$o | Add-Member -Type ScriptMethod -Name isInVerbose -Value  $InVerboseMode
+	$o | Add-Member -Type ScriptMethod -Name canLog -Value  $canLog
 
 	return $o;
 }

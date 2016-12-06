@@ -5,28 +5,28 @@
 		
 		$ExistentBackupName = $VALUES.PARAMS.ExistentBackupName;
 		$UseExistentPolicy = $VALUES.PARAMS.UseExistentPolicy;
-		$LogFn = $VALUES.SCRIPT_STORE.FUNCTIONS.Log;
 		
 		
 		if(!$ExistentBackupName){
-			& $LogFn "		ExistentBackupName wasn't passed." "VERBOSE"
+			$Log | Log "ExistentBackupName wasn't passed." "VERBOSE"
 			return;
 		}
 		
 
-		& $LogFn  "	Using file $ExistentBackupName"
+		$Log | Log  "Using file $ExistentBackupName"
 
 	
 		try{
 			$backupfile = (gi $ExistentBackupName) | %{$_.FullName}
 			$SBA = (NewSourceBackup)
 			$SBA.fullPath = $backupfile;
+			$SBA.determined=$true;
 		} catch {
-			& $LogFn  "		Error getting existent files: $_"
+			$Log | Log  "Error getting existent files: $_" -RaiseIdent
 		} finally {
 			if(!$backupFile){
-				& $LogFn  "		No backups found!"
-				& $LogFn  "		Existent Policy is: $UseExistentPolicy"	
+				$Log | Log "No backups found!"
+				$Log | Log "Existent Policy is: $UseExistentPolicy"	
 				if($UseExistentPolicy -eq "MustUse"){
 					throw "NO_EXISTENT_BACKUP_NAME_FOUND"
 				}

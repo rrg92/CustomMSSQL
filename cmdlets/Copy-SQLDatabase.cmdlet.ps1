@@ -4,12 +4,28 @@ Function Copy-SQLDatabase {
 	param(
 		#SOURCE OPTIONS
 			 #The source instance
+				[Alias("SS")]
 				$SourceServerInstance = $null
 			,#The source database name
+				
+				[Alias("SD")]
 				$SourceDatabase = $null
+				
+			,#Specifies a source login to connect on source SQL Server. If empty, uses Windows Authentication.
+				[Alias("SL")]
+				$SourceLogin = $null
+				
+			,#Specifies the password for source login, when applied. 
+				[Alias("SP")]
+				$SourcePassword = $null
+				
 			,#If you use a existing backup to restore, instead of take a new, use this parameter to specify the full path of this backup.
+				
+				[Alias("EB")]
 				$ExistentBackupName = $null
 			,#If specified, cmdlet will try get most recently backup in folder specified by BackupFolder.
+				
+				[Alias("UR")]
 				[switch]
 				$UseRecentBackup = $false
 			,#Its the behavior of cmdlet when getting existent file to restore.
@@ -37,6 +53,7 @@ Function Copy-SQLDatabase {
 				$SourceOrder = @("E","R","S")
 				
 			,#Puts database in readonly before take backup. This is useful for migrating database!
+				[Alias("SRO")]
 				[switch]
 				$SourceReadOnly	= $false
 				
@@ -48,9 +65,20 @@ Function Copy-SQLDatabase {
 				
 		#DESTINATION OPTIONS
 			,#The destination instance
+				[Alias("DS")]
 				$DestinationServerInstance
 			,#The destination database name
+				[Alias("DD")]
 				$DestinationDatabase
+				
+			,#Specifies a  login to connect on destination SQL Server. If empty, uses Windows Authentication.
+				[Alias("DL")]
+				$DestinationLogin = $null
+				
+			,#Specifies the password for destination login, when applied. 
+				[Alias("DP")]
+				$DestinationPassword = $null
+				
 			,#Specify a destination location to backup database the destination database, before replace it.
 			 #If null, or if destination dont exists, no backup is taken on destination.
 			 #THe script consider that destination is a folder location and file will generate the filename pattern!
@@ -60,27 +88,36 @@ Function Copy-SQLDatabase {
 			,#If specified, the script will read all permissions on destination database if it exists.
 			 #After restored, the script will try re-apply permissions. Any erros on this step dont break execution and are logged.
 			 #System permissions and user are not considered.
+				[Alias("NKP")]
 				[switch]
-				$KeepPermissions = $true
+				$NoKeepPermissions = $false
 				
 			,#Dump de DCL of permissions backed up to the specified file.
 			 #It is useful if the restore fails in middle of process.
+				[Alias("EPF")]
 				[string]
 				$ExportPermissionsFile = $null
 			
 		#BACKUP OPTIONS
 			,#The folder where backup are be taken. Can be share. 
+				[Alias("BF")]
 				$BackupFolder
 			,#The folder where backup will be restored. If same of BackupFolder, can be NULL.
 				$RemoteBackupFolder = $null		
 				
 			,#If specified, the cmdlet will apend a timestamp to backup file to make a unique backup filename.
+				[Alias("UBN")]
 				[switch]
 				$UniqueBackupName = $false
+				
+			,#Deletes source backup file if scripts runs sucessfully.
+				[switch]
+				$DeleteSourceBackup = $false
 
 		#DATABASE FILES OPTIONS
 			,#By default, if a destination database name exists, this cmdlet try put files on same location as existing (renaming) 
 			 #If this parameters is used, it will no try this.
+				[Alias("NCF")]
 				[switch]
 				$NoUseCurrentFilesFolder = $false
 
@@ -107,6 +144,7 @@ Function Copy-SQLDatabase {
 				$ManualFileMapping = $null
 				
 			,#The folder structure which put the database files. This must exists.
+				[Alias("RF")]
 				$RestoreFolder=$null
 				
 			,#Volume to folder mapping...
@@ -115,17 +153,20 @@ Function Copy-SQLDatabase {
 				[hashtable[]]
 				$VolumeToFolder=@()
 			,#If specified , then cmdlet will ignore existing files and LUNS and will use the mapping provide in VolumesToFolder parameter.
-			 #With this, you are  bypassing volume detection and say
+			 #With this, you are  bypassing volume detection and say, use folders as volume.
 				[switch]
 				$ForceVolumeToFolder = $false
 			,#Each element is a volume name. 
 			 #It can accept wildcard to be used the ps -like operator
+				[Alias("VA")]
 				[string[]]
 				$VolumesAllowed=@() 
 			,#Volumes allowed for data files.
+				[Alias("VAD")]
 				[string[]]
 				$VolumesForData=@()
 			,#Volumes allowed for log files
+				[Alias("VAL")]
 				[string[]]
 				$VolumesForLog=@()
 				
@@ -146,14 +187,17 @@ Function Copy-SQLDatabase {
 
 		#RESTORE OPTIONS
 			,#Its same as tsql REPLACE option.	
+				[Alias("R")]
 				[switch]
 				$Replace = $false	
 
 			,#Its same as NORECOVERY option. Note that with this option, any actions to be taken on restored database will fail. (E.g Post scritps)
+				[Alias("NR")]
 				[switch]
 				$NoRecovery = $false
 				
 			,#Puts database in SIMPLE recovery model after restore. This is useful when copy for non production environment.
+				[Alias("FS")]
 				[switch]
 				$ForceSimple = $false
 				
@@ -164,6 +208,7 @@ Function Copy-SQLDatabase {
 			 #You can specify a array of scripts, where each element is executed in single batch.
 			 #The parameter "PostScriptPolicy" controls behavior when scripts fails. 
 			 #You can specify a script or filename. For filename, just put prefix "FILE:" before. If file not exists, this will result in error...
+				[Alias("PS")]
 				[string[]]
 				$PostScripts = @()
 			,#Specify behavior when applying post scripts. The default is stop scripts on errors...
@@ -176,6 +221,7 @@ Function Copy-SQLDatabase {
 			,#Determines that scripts must run under account with permissions only in database.
 			 #This will create login and user on destination database and run scripts under this permissions.
 			 #This prevent scripts be executed with elevated permissions
+				[Alias("ULU")]
 				[switch]
 				$UseLimitedUser = $false
 				
@@ -190,10 +236,12 @@ Function Copy-SQLDatabase {
 		#LOGGING OPTIONS
 			,#Log level to display. This controls how much logging will be write to log destinations.
 			 #For all possible levels run Get-LogLevels cmdlet (this cmdlet is availble when importing module CustomMSSQL)
+				[Alias("LL")]
 				$LogLevel = "DETAILED"
 			,#Specify log destinations. You can pass a array of logs. NOTE: More destinations, more slow cmdlet will run.
 			 #A special destination is "#". This tells to cmdlet to log to screen (host).
 			 #If you pass Verbose parameter, the screen will be replaced by verbose output.
+				[Alias("L")]
 				$LogTo = "#"
 				
 			,#Buffers all logging message and when scripts runs. output it.
@@ -246,6 +294,7 @@ Function Copy-SQLDatabase {
 				SBA_FOLDER			= "$($GMV.CMDLETSIDR)\Copy-SQLDatabase\ps\SBA"  #Source Backup Algorithm
 				SBA_EXTENSION		= "sba.ps1" 	
 				DFA 				= @{}
+				AVA_FOLDER			= "$($GMV.CMDLETSIDR)\Copy-SQLDatabase\ps\AVA"  #Available Volume Algorithm
 				PARAMS 				= (GetAllCmdLetParams)
 				DFA_TOEXEC			= $NULL
 				CURRENT_LOCATION	= ($PsScriptRoot)
@@ -254,6 +303,7 @@ Function Copy-SQLDatabase {
 										SQL	 = @{}
 										FUNCTIONS = @{}	
 										SBA = @{}
+										AVA = @{}
 										
 										#Contains all scripts powershell in \Copy-SQLDatabase\ps folder that ends with "core.ps1".
 										#This type of routine handles specific parts of entire process.
@@ -271,6 +321,9 @@ Function Copy-SQLDatabase {
 				WIN_USERNAME			= [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 				COMPUTER_NAME			= $Env:ComputerName
 				DESTINATION_INFO		= @{DestinationFiles=$null}
+				SOURCE_SQL_LOGON		= @{AuthType="Windows";User=$null;Password=$null}
+				DESTINATION_SQL_LOGON	= @{AuthType="Windows";User=$null;Password=$null}
+				PRECONNECTIONS			= @{}
 			}
 			
 			#This is for internal and undocumented tests only...
@@ -296,12 +349,34 @@ Function Copy-SQLDatabase {
 				$BufferLog = $true;
 				$ForceStartMessage = $true;
 			}
+
+			#Importing necessary modules
+			$Modules = "XLogging";
+			$Modules | %{
+				write-verbose "importing module $_";
+				. ImportDependencieModule $_;
+			}
 			
 			#Creating necessary objects for use facilities providers by Logging from CustomMSSQL module.
-			$Log = (GetLogObject)
+			$Log = New-LogObject
 			$Log.LogTo = $LogTo;
 			$Log.LogLevel = $LogLevel; 
 			$Log.ExternalVerboseMode = $IsVerbose; 
+			$Log.UseDLD = $true;
+			$Log.DLDScript = {
+				param($LogPacket)
+				
+				if($LogPacket.message -match "^.+Command:.*"){
+					return "DEBUG";
+				}
+				
+				if($LogPacket.identLevel -ge 0){
+					return "DETAILED";
+				}
+				
+				#Nothing else...
+				return "PROGRESS";
+			}
 			
 			#If buffer log is enabled, then bufferize logging to hosts powershell application....
 			if($BufferLog){
@@ -309,35 +384,12 @@ Function Copy-SQLDatabase {
 			}
 			
 			#If cmdlet is in verbose mode, force verbose logging....
-			if($IsVerbose){..
+			if($IsVerbose){
 				$Log.LogLevel = "VERBOSE";
 			}
 
 			#Creates a easy call logging functions to be used on this script....
-			Function Log {
-				param($message,$LogLevel = $null,$Force = $false, $Retain = $false, $Flush = $false)
-				
-				if($SuggestOnly -and !$ForceLogging){
-					return;
-				}
-				
-				$Options = @{retain=$Retain;flush=$Flush};
-				
-
-				
-				if($message -is [string])
-				{
-					#write-host $message
-					$Log.Log($message,$LogLevel,$Force,$null,$null,$Options)
-					
-				} else {
-					$Log.LogSQLErrors($message,$LogLevel,$Force);
-				}
-
-			}
-			
-			#Register function in global variables...
-			$VALUES.SCRIPT_STORE.FUNCTIONS.add("Log","Log");
+			Set-Alias -Name Log -Value Invoke-Log;
 			
 			#This functions allows script call cores scripts that complements cmdlet work.
 			#This handles repetitive tasks...
@@ -352,179 +404,121 @@ Function Copy-SQLDatabase {
 					& $VALUES.SCRIPT_STORE.CORE.$CoreScriptName $VALUES;
 					
 				} catch {
-					Log "CORE_SCRIPT_ERROR[$CoreScriptName]: $_"
+					$Log | Log "CORE_SCRIPT_ERROR[$CoreScriptName]: $_"
 					if(!$LogErrorOnly){throw;}
 				}
 			}
 
 		#Log start of script, forcing no buffering if specified by user.
-		Log "Starting script!. Log Level is: $($Log.LogLevel). Current computer name is $($VALUES.COMPUTER_NAME). Current User is $($VALUES.WIN_USERNAME)" -Force $ForceStartMessage
+		$Log | Log "Starting script!. Log Level is: $($Log.LogLevel). Current computer name is $($VALUES.COMPUTER_NAME). Current User is $($VALUES.WIN_USERNAME). Using XLogging module for logging." -Force $ForceStartMessage
 		
 		#Logging parameters invoked!
-		Log "SCRIPT EFECTIVE PARAMETERS: " -Force $ForceStartMessage  -Retain $true
+		$Log | Log "SCRIPT EFECTIVE PARAMETERS: " "DETAILED" -Force $ForceStartMessage  -Retain -RaiseIdent
 			$VALUES.PARAMS.GetEnumerator() | %{
-				Log "	$($_.Key): $($_.Value)"
+				$Log | Log "$($_.Key): $($_.Value)"
 			}
-			Log "" -Force $ForceStartMessage -Flush $true #Just for flush log messages retained., if users wants force initial messages!
+		$Log | Log "" -Force $ForceStartMessage -Flush -DropIdent #Just for flush log messages retained., if users wants force initial messages!
 		
 		
 		#Loading core scripts. Core scripts are scripts that implements some functionality of cmdlets.
-		Log "Loading core scripts ..."
-			$CoreFolder = (PutFolderSlash $VALUES.CORESCRIPTS_FOLDER)+"*.core.ps1"
-			gci $CoreFolder | %{
-				Log "	Loading core script $($_.FullName) " "VERBOSE"
-				$CoreScriptName = $_.Name.replace(".core.ps1","")
-				Log "	CORE SCRIPT IS: $CoreScriptName" "VERBOSE"
-				$VALUES.SCRIPT_STORE.CORE.add($CoreScriptName,$_.FullName);
-			}
-			Log "	Cores Scripts: $($VALUES.SCRIPT_STORE.CORE.Count)"
+		$Log | Log "Loading core scripts ..." "VERBOSE" -RaiseIdent -IdentLevel 0
+		$LoadCoreScript = $VALUES.CORESCRIPTS_FOLDER+"\"+"LOAD_CORE.core.ps1";
+		& $LoadCoreScript;
+		$Log | Log "SUCESS!" "VERBOSE" -DropIdent
+		
 
 		#The distribution algorithms, called "DFA", are scripts that handles logic to distribute database files to disks.
-		Log "Loading distribute algorithms ..."
-			$algFilter = (PutFolderSlash $VALUES.DFA_FOLDER)+"*."+($VALUES.DFA_EXTENSION)
-			Log "	FILES: $algFilter" "VERBOSE"
-			gci $algFilter | %{
-				Log "	Loading file distributor algorigthm  $($_.FullName) " "VERBOSE"
-				$AlgName = $_.Name.replace("."+$VALUES.DFA_EXTENSION,"")
-				Log "	ALGORITHM IS: $AlgName" "VERBOSE"
-				$VALUES.DFA.add($AlgName,$_.FullName);
-			}
-			#Set defaults DFA...
-			$VALUES.DFA_TOEXEC = "BIGGERS_FIRST";
-			
-			$DfaCount = $VALUES.DFA.Count;
-			
-			if(!$DfaCount){
-				throw "NO_DFA"
-			}
-			
-			Log "	DFA Scripts: $DfaCount"
+		$Log | Log "Loading distribute algorithms ..." "VERBOSE" -RaiseIdent -IdentLevel 0;
+		& $VALUES.SCRIPT_STORE.CORE.LOAD_DFA;
+		$Log | Log "SUCESS!" "VERBOSE" -DropIdent
+		
+		#The available volume algorithms, called "AVA", are scripts that determine available volumes to restore files of database.
+		$Log | Log "Loading AVAILABLE volume algorithms ..." "VERBOSE" -RaiseIdent -IdentLevel 0;
+		& $VALUES.SCRIPT_STORE.CORE.LOAD_AVA;
+		$Log | Log "SUCESS!" "VERBOSE" -DropIdent
+		
 			
 		#The SQL scripts provide all code necessary to get information or execute tasks in involed SQL Server instances.
-		Log "Loading SQL Scripts..."
-			$sqlScriptsFilter = (PutFolderSlash $VALUES.SQL_SCRIPTS_FOLDERS)+"*"
-			gci $sqlScriptsFilter | %{
-				Log "	Getting SQL Script $($_.FullName)" "VERBOSE"
-				$ScriptType = [System.IO.Path]::GetExtension($_.Name)
-				$ScriptName = $_.BaseName
-				
-				Log "	SCRIPT WILL IDENTIFIED BY ($($ScriptType)): $ScriptName" "VERBOSE"
-				
-				$ScriptContent = $null;
-				#If a SQL Script, then assume it contains direct SQL code with
-				if($ScriptType -eq ".sql"){
-					Log "	SCRIPTS IS A SQL FILE. CONVERTING TO A SCRIPTBLOCK..." "VERBOSE"
-					$ScriptText = Get-Content $_.FullName | Out-String
-					$ScriptContent = [scriptblock]::create({return $ScriptText}).GetNewClosure();
-				} else {
-					$ScriptContent = $_.FullName;
-				}
-
-				$VALUES.SCRIPT_STORE.SQL.add($ScriptName,$ScriptContent);
-			}
+		$Log | Log "Loading SQL Scripts..." "VERBOSE" -IdentLevel 0 -RaiseIdent
+		& $VALUES.SCRIPT_STORE.CORE.LOAD_SQL_SCRIPTS;
+		$Log | Log "SUCESS!" "VERBOSE" -DropIdent
 			
 		#Source backup algorithms are scripts that generates a source backup which will be used to restore database in the destination.
-		Log "Loading source backup algorithms ..."
-			#Loads the source backups algoithms. This are files that return a hashtable. The hashtable format is documented on this cmdlet documentation.
-			$algFilter = (PutFolderSlash $VALUES.SBA_FOLDER)+"*."+($VALUES.SBA_EXTENSION)
-			Log "	FILES: $algFilter" "VERBOSE"
-			gci $algFilter | %{
-				Log "	Loading SOURCE BACKUP ALGORITHM $($_.FullName) " "VERBOSE"
-				$AlgName = $_.Name.replace("."+$VALUES.SBA_EXTENSION,"")
-				Log "	ALGORITHM IS: $AlgName" "VERBOSE"
-				$VALUES.SCRIPT_STORE.SBA.add($AlgName,(& $_.FullName));
-			}
-			
-			$SbaCount = $VALUES.SCRIPT_STORE.SBA.Count;
-			
-			if(!$SbaCount){
-				throw "NO_SBA"
-			}
-			
-			Log "	SBA Scripts: $SbaCount"
+		$Log | Log "Loading source backup algorithms ..." "VERBOSE" -IdentLevel 0 -RaiseIdent
+		& $VALUES.SCRIPT_STORE.CORE.LOAD_SBA;
+		$Log | Log "SUCESS!" "VERBOSE" -DropIdent
+		
 			
 		#SQLInterface is just a way for organize calls to SQL Server commands.
 			#This help for future changes on way how this cmdlet will connect to sql server...
-		Log "Configuring SQL Interface..."
-			$SQLInterface = @{	name="CUSTOMMSSQL"
-								PreReq=$null
-								cmdexec={param($S,$d,$Q,$U,$P,$i,[switch]$IgnoreExceptions = $false, [switch]$NoExecuteOnSuggest = $false)
-											
-											if($NoExecuteOnSuggest -and $SuggestOnly){
-												Log "	NO EXECUTING BECAUSE IS IN SUGGESTONLY MODE" "VERBOSE"
-												return;
-											}
+		$Log | Log "Loading SQL Interface..." "VERBOSE" -IdentLevel 0 -RaiseIdent
+		$SQLInterface = & $VALUES.SCRIPT_STORE.CORE.LOAD_SQLINTERFACE
+		$VALUES.SQLINTERFACE = $SQLInterface;
+		$Log | Log "SUCESS!" "VERBOSE" -DropIdent
 
-											$cmdparams = @{
-												ServerInstance=$S
-												Database=$d
-											}
-											if($U){
-												$cmdparams.add("Login",$U)
-												$cmdparams.add("Password",$P)
-											}
-																				
-											if($Q){
-												$cmdparams.add("Query",$Q)
-											}
-											
-											if($i){
-												$cmdparams.add("InputFile",$i)
-											}
-
-										try {
-											$results = Invoke-NewQuery @cmdparams;	
-											return $results;
-										} catch {
-											Log $_ 
-											if(!$IgnoreExceptions){
-												throw "MSSQL_ERROR: Last executed script failed! Check previous erros in log."
-											}
-										}
-								}
-							}
-			$VALUES.SQLINTERFACE = $SQLInterface;
-
+			
+		#Configuring source and destination connection info...
+		if($SourceLogin){
+			$VALUES.SOURCE_SQL_LOGON.AuthType = "SQL";
+			$VALUES.SOURCE_SQL_LOGON.User = $SourceLogin;
+			$VALUES.SOURCE_SQL_LOGON.Password = $SourcePassword;
+			$Log |  Log "Source login: $($VALUES.SOURCE_SQL_LOGON.Login)" -IdentLevel 0
+		}
+		
+		if($DestinationLogin){
+			$VALUES.DESTINATION_SQL_LOGON.AuthType 	= "SQL";
+			$VALUES.DESTINATION_SQL_LOGON.User 	= $DestinationLogin;
+			$VALUES.DESTINATION_SQL_LOGON.Password 	= $DestinationPassword;
+			$Log |  Log "Destination login: $($VALUES.DESTINATION_SQL_LOGON.Login)" -IdentLevel 0
+		}
+		
+		
+		
 		#Lets collect some destination info in order guide script flow and validations.
-		Log "Getting destination info"
-			$ServerInfoCommand = . $VALUES.SCRIPT_STORE.SQL.GET_INSTANCE_INFO $VALUES
-			$DestinatonInfo 	= . $SQLInterface.cmdexec -S $DestinationServerInstance -D master -Q $ServerInfoCommand
+		$Log |  Log "Getting destination info" -IdentLevel 0 -RaiseIdent
+			$ServerInfoCommand = & $VALUES.SCRIPT_STORE.SQL.GET_INSTANCE_INFO $VALUES
+			$DestinatonInfo 	= & $SQLInterface.cmdexec -On DESTINATION -D master -Q $ServerInfoCommand -AppNamePartID "DESTINATION_INFO";
 			$DestMajorVersion	=  GetProductVersionPart $DestinatonInfo.ProductVersion  1
 			$DestMinorVersion	=  GetProductVersionPart $DestinatonInfo.ProductVersion  2
 			$DestBuildNumber	=  GetProductVersionPart $DestinatonInfo.ProductVersion  3
 			$DestVersion		=  GetProductVersionNumeric $DestinatonInfo.ProductVersion;
 
-			
 			$VALUES.DESTINATION_INFO.add("MajorVersion",$DestMajorVersion)
 			$VALUES.DESTINATION_INFO.add("MinorVersion",$DestMinorVersion)
 			$VALUES.DESTINATION_INFO.add("BuildNumber",$DestMinorVersion)
 			$VALUES.DESTINATION_INFO.add("VersionNumeric",$DestVersion)
 			$VALUES.DESTINATION_INFO.add("DatabaseExists",$DestinatonInfo.DestinationDatabaseExists)
 
-			Log "	Destination version parts: NUMERIC: $DestVersion MAJOR: $DestMajorVersion MINOR: $DestMinorVersion BUILD: $DestBuildNumber"
-			Log "	Destination database exists? $($VALUES.DESTINATION_INFO.DatabaseExists) "
+		$Log |  Log "Destination version parts: NUMERIC: $DestVersion MAJOR: $DestMajorVersion MINOR: $DestMinorVersion BUILD: $DestBuildNumber"
+		$Log |  Log "Destination database exists? $($VALUES.DESTINATION_INFO.DatabaseExists) "
 			
-			$SQL2008R2SPI = GetProductVersionNumeric "10.50.2500";
-			if( $DestVersion -lt $SQL2008R2SPI  ) { #If before 2008 R2 SP1 (where sys.dm_os_volume_stats is available)
-				$GetVolumesInSQL = $false
-			}
+		$SQL2008R2SPI = GetProductVersionNumeric "10.50.2500";
+		if( $DestVersion -lt $SQL2008R2SPI  ) { #If before 2008 R2 SP1 (where sys.dm_os_volume_stats is available)
+			$GetVolumesInSQL = $false
+		}
 			
 		#Adding reporting info... In Suggest Only mode, a report is generated. The reporting information is on SUGGEST_REPORT value.
 		$VALUES.SUGGEST_REPORT.add("Destination Instance",$VALUES.PARAMS.DestinationServerInstance)
 		$VALUES.SUGGEST_REPORT.add("Destination Machine",$DestinatonInfo.ComputerName)
 		$VALUES.SUGGEST_REPORT.add("Destination Database",$VALUES.PARAMS.DestinationDatabase)
 
-		#At this points, lets get the source backup taht script will use to restore...
-		Log "Getting source backup file"
+		#At this points, lets get the source backup that script will use to restore...
+		$Log |  Log "Getting source backup file" -IdentLevel 0 -RaiseIdent
+		
+			#At this point, we determine prefix and suffix for backup file.
+			#This is useful on all SBA because it use this information to search...
 		
 			#If source instance and database are passed, we build the backup file prefix.
 			#The backup file prefix is a file mask that will use to generate backup file and get backup file, if source is, for example, a existent backup file.
 			if($SourceServerInstance -and $SourceDatabase){
 				$ServerDBNameForFile = $SourceServerInstance.replace("\","_")+"."+$SourceDatabase.Replace("\","_");
-				$BackupFilenameSuffix = "FORCOPY.bak"
 				$VALUES.BACKUP_FILEPREFIX = $ServerDBNameForFile
-				$VALUES.BACKUP_FILESUFFIX = $BackupFilenameSuffix
 			}
+			
+			#Suffix always follow this pattern.
+			$BackupFilenameSuffix = "FORCOPY.bak"
+			$VALUES.BACKUP_FILESUFFIX = $BackupFilenameSuffix
+			
 		
 			#This are the source scripts. Source Scripts are algorithsm used to get a backup source.
 			#We will try invoke each SBA script in order specified by user. If it fails, we call next one.
@@ -537,14 +531,20 @@ Function Copy-SQLDatabase {
 					continue;
 				}
 				
-				Log "	Attempt use $($SBA.NAME)"
-				$ResultSBA = & $SBA.SCRIPT $VALUES; #Call SBA script... note that outer script dont treats exceptions. Each script must wrry about rours errros...
+				$Log | Log "Attempt use the source: $($SBA.NAME)" -RaiseIdent
+				#Call SBA script... note that outer script dont treats exceptions. Each script must wrry about rours errros...
+				#The SBA must return a valid SBA object. This object is returned by function NewSourceBackup
+				$ResultSBA = & $SBA.SCRIPT $VALUES; 
+				$Log.dropIdent();
 				
-				if($ResultSBA.fullPath){ #break the execution if a valid type is found (this assume that SBA returns a valid object!!!)
+
+				
+				if($ResultSBA.determined){ #break the execution if a valid type is found (this assume that SBA returns a valid object!!!)
 					$ResultSBA.algorithm = $SBALG;
 					break;
 				}
 			
+				
 			}
 			
 			#If after the above part, no SOURCE BACKUP was determined, then abort!
@@ -552,17 +552,23 @@ Function Copy-SQLDatabase {
 				throw "NO_SOURCE_BACKUP";
 			}
 			$VALUES.SOURCE_BACKUP = $ResultSBA;
+			
+			if( $Log.canLog("VERBOSE") ){
+				$SourceBackupText = Object2HashString $ResultSBA;
+				$Log | Log "Source Backup Info:  $SourceBackupText" "VERBOSE" -RaiseIdent -ApplyThis
+			}
 
 		
 		#If we have a source path, then we will store in in VALUES store and make some pre actions that are necessary.
-		#When in suggest mode, this is not necessary, because no source path exists!
-			if($VALUES.SOURCE_BACKUP.fullPath){ #If not in suggest mode. Suggest mode don't generate backup file.
+		$Log |  Log "Executing pre actions..." -IdentLevel 0 -RaiseIdent
+		
+			if($VALUES.SOURCE_BACKUP.fullPath){
 				$fileName = [System.IO.Path]::GetFileName($VALUES.SOURCE_BACKUP.fullPath)
 				$VALUES.SOURCE_BACKUP.originalFullPath = $VALUES.SOURCE_BACKUP.fullPath
 				
 				#If backup must be copied to another location, then do it.
 				if($RemoteBackupFolder){
-					Log "	Remote folder is specified. Copying backup to $($VALUES.PARAMS.RemoteBackupFolder)" "PROGRESS"
+					$Log | Log "Remote folder is specified. Copying backup to $($VALUES.PARAMS.RemoteBackupFolder)" "PROGRESS"
 					
 					$newBackupFilePath = (PutFolderSlash $VALUES.PARAMS.RemoteBackupFolder)+$fileName
 					
@@ -579,45 +585,44 @@ Function Copy-SQLDatabase {
 				}
 				
 				#Logging...
-				Log "	Source backup file was determined: $($VALUES.SOURCE_BACKUP.fullPath)"
+				$Log | Log "Source backup file was determined: $($VALUES.SOURCE_BACKUP.fullPath)"
 				$VALUES.SUGGEST_REPORT.add("ORIGINAL_PATH",$VALUES.SOURCE_BACKUP.originalFullPath);
 				$VALUES.SUGGEST_REPORT.add("FINAL_PATH",$VALUES.SOURCE_BACKUP.fullPath);
 			}
 			
 			
 		#At this point, we need know which files are present in source backup for restore it correctly...
-		Log "Determining files that need be restored..."
+		$Log | Log "Determining files that need be restored..." -IdentLevel 0 -RaiseIdent
 			
 			#The dbfiles vars will recevei the list of files...
 			[object[]]$dbfiles = @();
 			
 			#Lest determine files available using this SQL script...
-			$FilesCommand = . $VALUES.SCRIPT_STORE.SQL.GET_BACKUP_FILES $VALUES
-			Log "	FilesCommand: $FilesCommand"
+			$FilesCommand = & $VALUES.SCRIPT_STORE.SQL.GET_BACKUP_FILES $VALUES
 			
 			#Collect files to be restored dependes if Suggest only... If wll have a available backup file, use it, if not, connect to the source instance.
-			if($VALUES.PARAMS.SuggestOnly -and $VALUES.SOURCE_BACKUP.type -eq "S"){
-				$dbfiles = . $SQLInterface.cmdexec -S $VALUES.PARAMS.SourceServerInstance 		-d $ -Q $FilesCommand
+			if($VALUES.PARAMS.SuggestOnly -and $VALUES.PARAMS.SourceServerInstance -and $VALUES.PARAMS.SourceDatabase){
+				$dbfiles = & $SQLInterface.cmdexec -On SOURCE -Q $FilesCommand -AppNamePartID "FILESINFO_SUGGEST"
 			} else {
-				$dbfiles = . $SQLInterface.cmdexec -S $VALUES.PARAMS.DestinationServerInstance 	-d master -Q $FilesCommand
+				$dbfiles = & $SQLInterface.cmdexec -On DESTINATION -d master -Q $FilesCommand -AppNamePartID "FILESINFO"
 			}
 				
-			
 			#Mounting a standard file information object to work with it on this script.
 			$filesInfo = @();
 			$dbfiles | %{
-				Log "	File $($_.LogicalName) have $($_.Size) bytes... "
+				$Log | Log  "File $($_.LogicalName) have $($_.Size) bytes... "
 				$filesInfo  += New-Object PsObject -Prop @{logicalName=$_.logicalName;size=$_.Size;restoreOn=$null;fullFileInfo=$_;pathIsComplete=$false}
 			}
 			
+			#If none database file found, error!
 			if(@($filesInfo).count -eq 0){
-				Log "	No database files information"
+				$Log | Log  "No database files information"
 				throw "NO_FILES_INFO"
 			}
 
 		#Get destination files if destination database exists!
 		if($VALUES.DESTINATION_INFO.DatabaseExists){
-			Log "Getting available files in destination database..."
+			$Log | Log "Getting available files in destination database..." -IdentLevel 0 -RaiseIdent;
 		
 			#If destination database exists, get the information about files of database.
 			CallCoreScript "DESTINATION_DATABASE_FILES";
@@ -625,7 +630,7 @@ Function Copy-SQLDatabase {
 			
 			
 		#Lets now determine which volumes we are available to put database files...
-		Log "Determining available volumes"
+		$Log | Log "Determining available volumes" -IdentLevel 0 -RaiseIdent
 			$volumes = @();
 		
 			#The concept of "volume" on context of this script is a bit more extended...
@@ -643,161 +648,48 @@ Function Copy-SQLDatabase {
 			}
 			
 			#There are many ways to determine available volumes to put database files.
-			#Each if bellow represents a algorithm that get volumes using its respectevy way.
-
-				if($NoRelocFiles){
-					#Create a dummy volume just for represent this and passed next validations...
-							$vol = NewVolumeObject;
-							$vol.name ="DUMMY"
-							$vol.freeSpace=0;
-							$vol.volType = "DUMMY"
-							$volumes += $vol;
-							
-					$VALUES.DFA_TOEXEC = "NORELOCFILES";
-				}
-
-				#Manual File Mapping
-				if($ManualFileMapping -and !$volumes){
-					Log "	Manual file mapping is choosed."
-				
-					$ManualFileMapping | %{
-					
-						if(!$_.logicalName){
-							throw "EMPTY_LOGICAL_NAME"
-						}
-						
-						if(!$_.physicalName){
-							throw "EMPTY_PHYSICAL_NAME"
-						}
-
-						Log "	Manual file specified: $($_.logicalName) TO $($_.physicalName) "
-							
-						$vol = NewVolumeObject;
-						$vol.name = $_.physicalName;
-						$vol.sqlLogicalName = $_.logicalName;
-						$vol.volType="SQLFILE"
-						$volumes += $vol;
-					}
-					
-					$VALUES.DFA_TOEXEC = "MANUAL_MAPPING";
-				}
-				
-				#Try existen files;
-				if(!$NoUseCurrentFilesFolder -and !$volumes){
-					Log "	Attempting check current existents files as volumes"
-					
-					
-					$CurrentFilesCommand = . $VALUES.SCRIPT_STORE.SQL.GET_CURRENT_FILES $VALUES
-					try {
-						$DestinationFiles = . $SQLInterface.cmdexec -S $DestinationServerInstance -d $DestinationDatabase -Q $CurrentFilesCommand
-						
-						if($DestinationFiles){
-							$DestinationFiles | %{
-								$vol = NewVolumeObject;
-								$vol.name = $_.physicalName;
-								$vol.sqlLogicalName = $_.logicalName;
-								$vol.volType="SQLFILE"
-								
-								$volumes += $vol;
-							}
-						} else {
-							throw "NO_DESTINATION_FILES"
-						}
-						
-						#Empty the restore folder... This prevent a folder passed by user must be appended...
-						$RestoreFolder = $null;
-						$VALUES.DFA_TOEXEC = "REPLACE_EXISTENT";
-						Log "		FILES COLLECTED SUCESSFULY!"
-					} catch {
-						Log $_
-						Log "	Replace Policy is: $CurrentFilesFolderPolicy"
-						
-						if($CurrentFilesFolderPolicy -eq "MustReplace"){
-							throw;
-						}
-						
-						$NoUseCurrentFilesFolder = $true;
-						$volumes = @();
-					}
-				}
-
-				#Try forced mapping.
-				if($ForceVolumeToFolder -and !$volumes){
-					Log "	Using supplied folder paths as volumes..."
-					
-					$volumes = @()
-					$VolumeToFolder | %{
-						if($_.Path){
-							$Path = $_.Path
-						}
-						$vol = NewVolumeObject;
-						$vol.name = $path;
-						$vol.volType="FOLDER"
-						$volumes += $vol;
-					}
-					
-					$VALUES.DFA_TOEXEC = "RANDOM_LEAST_USED";
-				}
+			#This is controled by "Available Volumes Algorithm" (AVA).
+			#In any version, can exists multiple algorithms. This is controled by AVA algorithms!
+			$AVAOrder = "NRF","MFM","EF","FM","SQLVOL","DV"
+			$Log | Log "The AVA order is $AVAOrder" "VERBOSE"
 			
-				if($GetVolumesInSQL -and !$volumes){
-					Log "	Getting volumes using SQL DMVs... On destination instance"
-					
-					try {
-						$GetVolumesCommand = . $VALUES.SCRIPT_STORE.SQL.GET_VOLUMES $VALUES
-						$results = . $SQLInterface.cmdexec -S $DestinationServerInstance -d "master" -Q $GetVolumesCommand
-						$results | %{
-							$vol = NewVolumeObject;
-							$vol.name = $_.volume_mount_point;
-							$vol.freeSpace=$_.available_bytes;
-							$vol.volType = "LUN"
-							$volumes += $vol;
-						}
-					} catch {
-						Log $_
-						Log "	ERROR!. Traditional method will be used."
-						$volumes = @();
-					}
+			#Iterate over ava algorithms...
+			:AVALoop foreach($AVA in $AVAOrder) {
+				$CurrentAVAName = $AVA;
+				
+				
+				if(!$VALUES.SCRIPT_STORE.AVA.Contains($CurrentAVAName)){
+					throw "INEXISTENT_AVA:"+$CurrentAVAName;
 				}
 				
-				#Try remote volumes.
+				$CurrentAVA = $VALUES.SCRIPT_STORE.AVA.$CurrentAVAName;
+				$Log | Log "Current AVA is: $CurrentAVAName --> $CurrentAVA" "VERBOSE" -RaiseIdent
+				
+				
+				#Call AVA!
+				$CurrentLogLevel = $Log.getIdentLevel(); #Backup current identation level!
+				$volumes = & $CurrentAVA;
+				$Log.setIdentLevel($CurrentLogLevel); #Restore current identation level!
+				
+				
+				
 				if(!$volumes){
-					Log "	Getting volumes available in remote server $($DestinatonInfo.ComputerName)"
-
-					
-					Get-WMiObject Win32_Volume -ComputerName $DestinatonInfo.ComputerName | where {$_.DriveType -eq 3 -and !$_.SystemVolume -and !$_.BootVolume} | %{
-						$vol = NewVolumeObject;
-						$vol.name = $_.name;
-						$vol.freeSpace=$_.freeSpace;
-						$vol.realFreeSpace=$_.freeSpace;
-						$vol.volType = "LUN"
-						$volumes += $vol;
-						
-						Log "	VOLUME FOUND: $($vol.name)"
-						if($VolumesForData){
-							Log "		Checking if this volume can hold data files..."
-							$TmpVolumesAllowed = $VolumesForData | where {$vol.name -like $_}
-							if($TmpVolumesAllowed){
-								Log "			YES!"
-								$vol.filesAllowed += "D"
-							}
-						}
-						
-						if($VolumesForLog){
-							Log "		Checking if this volume can hold log files..."
-							$TmpVolumesAllowed = $VolumesForLog | where {$vol.name -like $_};
-							if($TmpVolumesAllowed){
-								Log "			YES!"
-								$vol.filesAllowed += "L"
-							}
-						}
-					}
+					$Log | Log "No volume returned. The next AVA will take place." "VERBOSE";
+					continue :AVALoop;
+				} else {
+					$Log | Log "Volumes returned by this AVA! Loop will end" "VERBOSE"
+					break :AVALoop; #break.
 				}
+			}
+			
+			if(!$VALUES.DFA_TOEXEC){
+				throw "NO_DFA";
+			}
 
-	
 			#At this point, we have collected all possible volumes... LEts log it...
-			Log "	Volumes collected:"
+			$Log | Log "Volumes collected:"
 			$volumes | %{
-				Log "			$($_.Name) |TYPE: $($_.volType)"; 
+				$Log | Log "$($_.Name) |TYPE: $($_.volType)"; 
 			}
 			
 			#This represent all volume that we can use....
@@ -806,18 +698,18 @@ Function Copy-SQLDatabase {
 			#At this point we must eliminate volumes that user not specified.
 			if($VolumesToUse){
 				if($VALUES.DFA_TOEXEC -eq "REPLACE_EXISTENT"){
-					Log "	Volumes allowed check will be ignored because current DFA."
+					$Log | Log "Volumes allowed check will be ignored because current DFA."
 				} else {
 					$passedVolumes = @();
-					Log "		 Was specified volume for filtering: "
-					$VolumesToUse | %{Log "			$_"}
-					Log "		Filtering volumes..."
+					$Log | Log "Was specified volume for filtering: "
+					$VolumesToUse | %{$Log | Log "$_"}
+					$Log | Log "Filtering volumes..."
 					foreach($vol in $volumes){
 						$passedFilters = $null;
 						$passedFilters = $VolumesToUse | where {$vol.name -like $_}
 					
 						if(!$passedFilters){
-							Log "			Volume $($vol.Name) was removed!"
+							$Log | Log "Volume $($vol.Name) was removed!"
 							continue;
 						}
 
@@ -831,17 +723,17 @@ Function Copy-SQLDatabase {
 			#At this point we have all elegible volumes!
 			$TotalVolumes = @($volumes).count
 			if($TotalVolumes -eq 0){
-				Log "	No volumes available for restore on destination server"
+				$Log | Log "No volumes available for restore on destination server"
 				throw "NO_VOLUMES_AVAILABLE"
 			}
 
-			Log "	Total Volumes: $TotalVolumes"	
+			$Log | Log "Total Volumes: $TotalVolumes"	
+			
 			#Now, lets substract file size of each file already existent. 
 			#This is because, if destination database exists, we must not consider space ocuppied by your files..
 			#For each file, lets get corresponding volume and add free space and store it a new property...
-			
 			if($VALUES.DESTINATION_INFO.DatabaseExists){
-				Log "	Adjusting volume free space based on existent files!"
+				$Log | Log "Adjusting volume free space based on existent files!"
 				:FilesLoop foreach($CurrentFile in $VALUES.DESTINATION_INFO.DestinationFiles){
 					#Get all files that starts with volume name (the path of volume)
 					$ElegibleVolumes = @();
@@ -859,7 +751,7 @@ Function Copy-SQLDatabase {
 					#Just reduce if vo
 					if($volumeToHandle.volType -eq "LUN"){
 						$volumeToHandle.freeSpace += ($CurrentFile.size*8*1024);
-						Log "	Volume $($volumeToHandle.name) contains existing database file $($CurrentFile.physicalName). New free space: $($volumeToHandle.freeSpace) Real: $($volumeToHandle.realFreeSpace)"
+						$Log | Log "Volume $($volumeToHandle.name) contains existing database file $($CurrentFile.physicalName). New free space: $($volumeToHandle.freeSpace) Real: $($volumeToHandle.realFreeSpace)"
 					}
 					
 				}
@@ -869,19 +761,19 @@ Function Copy-SQLDatabase {
 
 		#At this point, we can distribute files to volumes. Each DFA script handles your logic.
 		#The DFA script that will be executed depends of parameters that users passed and the flow of script when determining volumes and files.
-		if($NoRelocFiles){
-			Log "No file relocation will be taken!"
+		if($VALUES.PARAMS.NoRelocFiles.IsPresent){
+			$Log | Log "No file relocation will be taken!"
 		} else {
 		
-			Log "Calling distribute files algorithms... "
+			$Log | Log "Calling distribute files algorithms... "
 
 				#At this point, we can choose correct algortihm based on parameters...
 				if(!$VALUES.DFA_TOEXEC){
-					Log "	No valid DFA Script. Setting default..."
+					$Log | Log "No valid DFA Script. Setting default..."
 					$VALUES.DFA_TOEXEC = "BIGGERS_FIRST"
 				}
 				
-				Log "	Choosed algorithm is: $($VALUES.DFA_TOEXEC) " "PROGRESS"
+				$Log | Log "Choosed algorithm is: $($VALUES.DFA_TOEXEC) " "PROGRESS"
 				
 				#Retrieve the DFA scriptblock choosed.
 				$DFAScript = $VALUES.DFA.Item($VALUES.DFA_TOEXEC)
@@ -890,16 +782,16 @@ Function Copy-SQLDatabase {
 				try {
 					& $DFAScript $filesInfo $volumes
 				} catch {
-					throw "ERROR WHEN DISTIRUTING FILES: $_";
+					throw "ERROR WHEN DISTRIBUTING FILES: $_";
 				}
 		}
 			
-		Log "Preparing for restore on destination server..."
+		$Log | Log "Preparing for restore on destination server..."
 
 			$RestoreCommand = . $VALUES.SCRIPT_STORE.SQL.RESTORE_DATABASE $VALUES
 
-			if(!$NoRelocFiles){
-				Log "	Building MOVE CLAUSE"
+			if(!$VALUES.PARAMS.NoRelocFiles){
+				$Log | Log "Building MOVE CLAUSE"
 
 				$RestoreFoldersChecked = @();
 				$RemoteCheck = {
@@ -913,7 +805,7 @@ Function Copy-SQLDatabase {
 				}
 				
 				foreach($info in $filesInfo){
-					Log "		BUILDING FOR FILE '$($info.logicalName)'. Elegible volume is: $($info.restoreOn)"
+					$Log | Log "BUILDING FOR FILE '$($info.logicalName)'. Elegible volume is: $($info.restoreOn)"
 					$destinationFile = $info.restoreOn;
 					
 					if(!$info.pathIsComplete){
@@ -924,7 +816,7 @@ Function Copy-SQLDatabase {
 						
 						if($mappedFolder){
 							if( @($mappedFolder).count -gt 1  ){
-								Log "		MULTIPLE MAPPED FOLDERS!!! FIX IT!"
+								$Log | Log "MULTIPLE MAPPED FOLDERS!!! FIX IT!"
 								throw "MULTIPLE_MAPPED_FOLDERS"
 							}
 							
@@ -938,14 +830,14 @@ Function Copy-SQLDatabase {
 						try {
 
 							if($RestoreFoldersChecked -NotContains $destinationFolder){
-								Log "		Trying create restore folder...: $destinationFolder";
+								$Log | Log "Trying create restore folder...: $destinationFolder";
 								
 								$RestoreFoldersChecked += $destinationFolder;
 								$result = Invoke-Command -ScriptBlock $RemoteCheck -ArgumentList $destinationFolder -ComputerName $DestinatonInfo.ComputerName;
 							}
 							
 						} catch {
-							Log "			ERROR WHEN TRYING CREATE THE RESTORE FOLDER: $_";
+							$Log | Log "ERROR WHEN TRYING CREATE THE RESTORE FOLDER: $_";
 						}
 						
 						$fileExt = ".ndf"
@@ -967,7 +859,7 @@ Function Copy-SQLDatabase {
 						$destinationFile = $destinationFolder+"$DestinationDatabase.$logicalName$fileExt"
 					}
 					
-					Log "			Destination is: $destinationFile"
+					$Log | Log "Destination is: $destinationFile"
 					$moveTO = ",MOVE '$($info.logicalName)' TO '$destinationFile' "
 					
 					$VALUES.SUGGEST_REPORT.add("FILE: $($info.logicalName)","TO: $destinationFile");
@@ -979,14 +871,14 @@ Function Copy-SQLDatabase {
 		
 
 		
-		if($DestinationDatabaseBackup -and $VALUES.DESTINATION_INFO.DatabaseExists){
-			Log "Destination database will be backed!"
+		if($VALUES.PARAMS.DestinationDatabaseBackup -and $VALUES.DESTINATION_INFO.DatabaseExists){
+			$Log | Log "Destination database will be backed!"
 			
 			$ts = (Get-Date).toString("yyyy-MM-dd-HHmmss");
 			$ServerDBNameForFile = $DestinationServerInstance.replace("\","_")+"."+$DestinationDatabase.Replace("\","_");
 			
 			$DestinationBackupPath = (PutFolderSlash $DestinationDatabaseBackup)+$ServerDBNameForFile+".$ts.bak"
-			Log "	Backup destination: $DestinationBackupPath" "PROGRESS"
+			$Log | Log "Backup destination: $DestinationBackupPath" "PROGRESS"
 			
 			$BackupOptions = ""
 			
@@ -1004,43 +896,66 @@ Function Copy-SQLDatabase {
 			
 			$VALUES.SUGGEST_REPORT.add("DESTINATION BACKUP: $($info.logicalName)","TO: $DestinationBackupPath");
 			
-			Log "	Backup Destination command: $BackupDestinationCommand"
-			$status = & $SQLInterface.cmdexec -S $DestinationServerInstance -d master -Q $BackupDestinationCommand -NoExecuteOnSuggest
-			Log "	$($status.Status)" "PROGRESS"
+			$Log | Log "Backup Destination command: $BackupDestinationCommand"
+			$status = & $SQLInterface.cmdexec -On DESTINATION -d master -Q $BackupDestinationCommand -NoExecuteOnSuggest -AppNamePartID "BACKUP_DESTINATION"
+			$Log | Log "$($status.Status)" "PROGRESS"
 		}	
 		
-		if($KeepPermissions -and $VALUES.DESTINATION_INFO.DatabaseExists){
-			Log "	The permissions will remain after restore."
+		if(!$NoKeepPermissions -and $VALUES.DESTINATION_INFO.DatabaseExists){
+			$Log | Log "The permissions will remain after restore."
 			
 			CallCoreScript "DESTINATION_PERMISSION_BACKUP" -LogErrorOnly;
 		}
 		
-		Log "Restoring databases on destination..."
 
-			$KillConnectionCommand = . $VALUES.SCRIPT_STORE.SQL.KILL_CONNECTIONS $VALUES
 			
-			Log "	Kill Connections command: $KillConnectionCommand"
-			Log "	Restore command: $RestoreCommand "
-
-
-			& $SQLInterface.cmdexec -S $DestinationServerInstance -d master -Q $KillConnectionCommand -NoExecuteOnSuggest
-			& $SQLInterface.cmdexec -S $DestinationServerInstance -d master -Q $RestoreCommand	-NoExecuteOnSuggest	
+		#Lets get session list to log before kill. This will help user analuze possible problems...
+		if( $Log.canLog("DETAILED") ){
+			$Log | Log "Getting current connections on database" "DETAILED";
+			$GetConnectionsCommand = . $VALUES.SCRIPT_STORE.SQL.GET_CONNECTIONS $VALUES -AppNamePartID "GET_CONNECTIONS";
+			$Log | Log "Get Connections command: $GetConnectionsCommand"
 			
-		if($ForceSimple){
-			Log "Putting database in SIMPLE RECOVERY"
+			try {
+				$SQLSessionsList = & $SQLInterface.cmdexec -On DESTINATION -d master -Q $GetConnectionsCommand -NoExecuteOnSuggest
+				
+				$Log | Log "Connection list:"
+				$SQLSessionsList | %{
+					$SessionRepresentation = Object2HashString($_);
+					$Log | Log "$SessionRepresentation" "DETAILED"; 
+				}
+				
+			} catch {
+				$Log | Log $_;
+			}
+			
+		}
+			
+		
+		$KillConnectionCommand = . $VALUES.SCRIPT_STORE.SQL.KILL_CONNECTIONS $VALUES
+		$Log | Log "Killing existent connections on database..."
+		$Log | Log "Kill Connections command: $KillConnectionCommand"
+			& $SQLInterface.cmdexec -On DESTINATION -d master -Q $KillConnectionCommand -NoExecuteOnSuggest -AppNamePartID "KILL_CONNECTIONS"
+
+		
+		$Log | Log "Restoring databases on destination..."
+		$Log | Log "Restore command: $RestoreCommand "
+			& $SQLInterface.cmdexec -On DESTINATION -d master -Q $RestoreCommand -NoExecuteOnSuggest -AppNamePartID "RESTORE"
+			
+		if($VALUES.PARAMS.ForceSimple){
+			$Log | Log "Putting database in SIMPLE RECOVERY"
 			try {
 				$Command = "ALTER DATABASE [$DestinationDatabase] SET RECOVERY SIMPLE WITH ROLLBACK IMMEDIATE;"
-				& $SQLInterface.cmdexec -S $DestinationServerInstance -d master -Q $Command  -NoExecuteOnSuggest
-				Log "	Success!"
+				& $SQLInterface.cmdexec -On DESTINATION -d master -Q $Command  -NoExecuteOnSuggest -AppNamePartID "FORCE_SIMPLE"
+				$Log | Log "Success!"
 			} catch {
-				Log $_ 
-				Log "	ERROR:  $ErrorMessage" "PROGRESS"
+				$Log | Log $_ 
+				$Log | Log "ERROR:  $ErrorMessage" "PROGRESS"
 			}
 		}
 			
 		
-		if($KeepPermissions -and $VALUES.DESTINATION_INFO.DatabaseExists){
-			Log "	The backed up permissions are going to restore"
+		if(!$VALUES.PARAMS.NoKeepPermissions.IsPresent -and $VALUES.DESTINATION_INFO.DatabaseExists){
+			$Log | Log "The backed up permissions are going to restore"
 			
 			CallCoreScript "RESTORE_PERMISSION" -LogErrorOnly;
 		}
@@ -1048,33 +963,38 @@ Function Copy-SQLDatabase {
 			
 			
 		if($PostScripts){
-			Log "Posts scripts are requested"
+			$Log | Log "Posts scripts are requested"
 			
 			#Some auxiliary variables...
 				$ScriptOrder = 0;
 				$ExpandedScripts = @()
 				#Preparing parameters to execute script via SQLInterface...
-				$connectParams = @{S=$VALUES.PARAMS.DestinationServerInstance;d=$VALUES.PARAMS.DestinationDatabase;i=$null;Q=$null;NoExecuteOnSuggest=$true};
+				$connectParams = @{
+					On='DESTINATION'
+					i=$null
+					Q=$null
+					NoExecuteOnSuggest=$true
+					AppNamePartId="POST_SCRIPT"
+				};
 			
 			$DropLimitedUser = $false;
 			if($UseLimitedUser){
-				Log "	A Limited user will be used!" "PROGRESS"
+				$Log | Log "A Limited user will be used!" "PROGRESS"
 				$GenerateLimitedUserCommand = & $VALUES.SCRIPT_STORE.SQL.CREATE_LIMITED_USER $VALUES
-				& $SQLInterface.cmdexec -S $DestinationServerInstance -d $DestinationDatabase -Q $GenerateLimitedUserCommand -NoExecuteOnSuggest
+				& $SQLInterface.cmdexec -On DESTINATION -Q $GenerateLimitedUserCommand -NoExecuteOnSuggest -AppNamePartID "LIMITED_USER_CREATE"
 				$DropLimitedUser = $true;
 				$LimitedName = $VALUES.LIMITED_USER.NAME;
 				$LimitedPass = $VALUES.LIMITED_USER.PASSWORD;
-				Log "	LIMITED USER DETAILS: $LimitedName PASS: $LimitedPass" "VERBOSE"
+				$Log | Log "LIMITED USER DETAILS: $LimitedName PASS: $LimitedPass" "VERBOSE"
 				$VALUES.SUGGEST_REPORT.add("LIMITED_USER","NAME:$LimitedName PASS:$LimitedPass")
-				$connectParams.add("U",$LimitedName)
-				$connectParams.add("P",$LimitedPass)
+				$connectParams.Logon = @{AuthType="SQL";Login=$LimitedName;Password=$LimitedPass};
 			}
 
 
 			#Expanding scripts.
 			#	Expading do: If scripts is prefixed with FILE:<PATH> and path is a folder, then scritps get all files recursively.
 			#					TODO: Expand powershell scriptblocks...
-			Log "	Analyzing post scripts (expanding)..."
+			$Log | Log "Analyzing post scripts (expanding)..."
 			foreach($Script in $PostScripts){
 				try {
 					$o = New-Object PSObject -Prop @{
@@ -1105,13 +1025,13 @@ Function Copy-SQLDatabase {
 						
 					
 						if( $IsExpandedFiles ){
-							Log "	Folder Detected: $FileName" "DETAILED"
+							$Log | Log "Folder Detected: $FileName" "DETAILED"
 							
 							$ChildFiles = gci -recurse $FileName | where {!$_.PSIsContainer} 
 							$Objects = @();
 							
 							$ChildFiles | sort -Property Name | %{
-								Log "		File detected: $($_.FullName)" "DETAILED"
+								$Log | Log "File detected: $($_.FullName)" "DETAILED"
 								$oCopy = $o.psobject.copy();
 								$oCopy.scriptType 		= "FILE";
 								$oCopy.scriptContent 	= $_.FullName;
@@ -1132,16 +1052,16 @@ Function Copy-SQLDatabase {
 					$ExpandedScripts += $o
 				} catch {
 					$message = $_.Exception.GetBaseException().Message
-					Log "		ERROR: $message" "PROGRESS"
+					$Log | Log "ERROR: $message" "PROGRESS"
 				}
 			}
 
 			
 			#Executing scripts...
-			Log "	Starting post scripts applying..."
+			$Log | Log "Starting post scripts applying..."
 			$ExpandedScripts | sort ScriptOrder | %{
 				$Script = $_;
-				Log "	Applying post script $($Script.ScriptOrder): $($Script.scriptContent)" "PROGRESS"
+				$Log | Log "Applying post script $($Script.ScriptOrder): $($Script.scriptContent)" "PROGRESS"
 
 				$VALUES.SUGGEST_REPORT.add("POST_SCRIPT $($Script.ScriptOrder)","$Script.scriptContent")
 				
@@ -1151,7 +1071,7 @@ Function Copy-SQLDatabase {
 				
 				#Determining if command to execute is a input file or query string...
 				if($Script.scriptType -eq "FILE"){
-					Log "		Script is a input file!" "VERBOSE"
+					$Log | Log "Script is a input file!" "VERBOSE"
 					$connectParams.add("i",$Script.scriptContent)
 				} else {
 					$connectParams.add("Q",$Script.scriptContent);
@@ -1163,11 +1083,11 @@ Function Copy-SQLDatabase {
 					$result = @(& $SQLInterface.cmdexec @connectParams)			
 					$SucessExecuted = $true;
 					
-					Log "	SUCCESS!" "PROGRESS";
+					$Log | Log "SUCCESS!" "PROGRESS";
 					
 					$result | where {$_} | %{	
 						$resultString = Object2HashString($_)
-						Log "		$resultString"
+						$Log | Log "$resultString"
 					}
 						
 				} catch {
@@ -1175,8 +1095,8 @@ Function Copy-SQLDatabase {
 					$message = "ERROR!"
 					if($SucessExecuted){$message = "ERROR_AT_RESULTS_DISPLAYING"}
 				
-					Log "	$message POLICY: $PostScriptPolicy" "PROGRESS"
-					Log $_
+					$Log | Log "$message POLICY: $PostScriptPolicy" "PROGRESS"
+					$Log | Log $_
 					
 					if($PostScriptPolicy -eq "StopOnError"){throw "POST_SCRIPT_ERROR"}
 				}
@@ -1184,9 +1104,9 @@ Function Copy-SQLDatabase {
 			
 			#If LimitedUser must be dropped...
 			if($DropLimitedUser){
-				Log "DROPING LIMITED USER..."
+				$Log | Log "DROPING LIMITED USER..."
 				$DropLimitedUserCommand = & $VALUES.SCRIPT_STORE.SQL.DROP_LIMITED_USER $VALUES
-				& $SQLInterface.cmdexec -S $DestinationServerInstance -d $DestinationDatabase -Q $DropLimitedUserCommand -IgnoreExceptions -NoExecuteOnSuggest
+				& $SQLInterface.cmdexec -On DESTINATION  -Q $DropLimitedUserCommand -IgnoreExceptions -NoExecuteOnSuggest -AppNamePartID "LIMITED_USER_DROP"
 			}
 		
 		}
@@ -1197,16 +1117,29 @@ Function Copy-SQLDatabase {
 				write-host "$($_.Key) $($_.Value)"
 			}
 		} else {
-		
-			Log "DATABSE COPIED!" "PROGRESS"
-			Log "	SOURCE: $SourceServerInstance $SourceDatabase File:$($VALES.SOURCE_BACKUP.fullPath)" "PROGRESS"
-			Log "	DESTINATION: $DestinationServerInstance $DestinationDatabase" "PROGRESS"	
+			
+			if($DeleteSourceBackup){
+				$Log | Log "Deleting source backup..."
+			
+				try {
+					Remove-Item $VALUES.SOURCE_BACKUP.fullPath;
+					$Log | Log "Success" "PROGRESS";
+				} catch {
+					$Log | Log "Failed: $_" "PROGRESS";
+				}
+			}
+			
+			
+			
+			$Log | Log "DATABASE COPIED!" "PROGRESS"
+			$Log | Log "SOURCE File:$($VALUES.SOURCE_BACKUP.fullPath)" "PROGRESS"
+			$Log | Log "DESTINATION: $DestinationServerInstance $DestinationDatabase" "PROGRESS"	
 		}
 		
 		#Finalizations....
 		$ScriptExitCode = 0;
 		$ExitWithCode = $false; #TODO: Transform in a parameter...
-		Log "SCRIPT EXECUTED SUCESSFULLY";
+		$Log | Log "SCRIPT EXECUTED SUCESSFULLY";
 	} catch {
 		#If SQLAgent mode is on, then the script finalize the exit code other than 0 is propagate to caller process.
 		#If it not happens, the powershell process end without passing exit code, and caller process dont knows nothing about the error. in this case, jobs present sucess.
@@ -1217,7 +1150,7 @@ Function Copy-SQLDatabase {
 		}
 		
 		if(Get-Command -Name Log -EA "SilentlyContinue"){
-			Log $_;
+			$Log | Log $_;
 		}
 		
 		throw;
@@ -1390,6 +1323,7 @@ Function Copy-SQLDatabase {
 				- TODO: Allow user specify a separate location for post script execution results.
 				- TODO: Implement throttling. Reconsider this name, because is to dificult write....
 				- TODO: Implement locked file access enchament.
+				- TODO: POST SCRIPTS ENGINE DONT UNDERSTAND GO
 
 	#>
 }	
@@ -1447,6 +1381,7 @@ Function NewSourceBackup {
 			fullPath=$null
 			originalFullPath=$null
 			algorithm="" #Algorithm that determine the source. the acceptable values are same as $SourceOrder parameter. Valid values are same name of file that implements algorithms...
+			determined=$false #This flag control if source backup was determined. If a algotirhtm wants end main loop, it must flag as $true.
 		}
 		
 

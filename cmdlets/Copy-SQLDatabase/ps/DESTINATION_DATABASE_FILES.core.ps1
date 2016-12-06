@@ -1,10 +1,12 @@
 param($VALUES)
 
-Log "	Getting destination database files!"
+$Log | Log "Getting destination database files!"
 
 #File command!
 $GetFilesCommand = . $VALUES.SCRIPT_STORE.SQL.GET_DATABASE_FILES
 
-Log "		GET_DATABASE_FILES Command: $BACKUPCOMMAND";
-
-$VALUES.DESTINATION_INFO.DestinationFiles = . $SQLInterface.cmdexec -S $VALUES.PARAMS.DestinationServerInstance -d $VALUES.PARAMS.DestinationDatabase -Q $GetFilesCommand
+try {
+	$VALUES.DESTINATION_INFO.DestinationFiles = . $SQLInterface.cmdexec -On DESTINATION -Q $GetFilesCommand -AppNamePartId "DESTINATION_FILES_INFO"
+} catch {
+	$Log | Log "ERROR GETTING DESTINATION FILES INFO: $_";
+}
