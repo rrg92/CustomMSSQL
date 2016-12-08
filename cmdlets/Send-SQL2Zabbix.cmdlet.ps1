@@ -165,7 +165,7 @@ $ErrorActionPreference = "stop";
 		
 		Log " Caching enabled!"
 		
-		$SubFolder = $HostName;
+		$SubFolder = $VALUES.HOSTNAME;
 		@([IO.Path]::GetInvalidPathChars()) | %{
 			$SubFolder = $SubFolder.replace($_.toString(),'');
 		}
