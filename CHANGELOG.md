@@ -2,7 +2,7 @@
 All important changes to this project will be added to this file!
 This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 
-## [0.6.6] - 2016-12-08
+## [0.6.6] - 2016-12-09
 ### Changed
 - (Send-SQL2Zabbix) Fixed issue #17 on caching mechanism.
 
