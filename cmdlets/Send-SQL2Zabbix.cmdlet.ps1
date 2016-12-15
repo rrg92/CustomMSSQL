@@ -80,8 +80,10 @@ $ErrorActionPreference = "stop";
 				PARAMS					= (GetAllCmdLetParams)
 				USER 					= @{INSTANCE_NAME=$Instance;CUSTOM=$UserCustomData}
 				EXECUTION_ID			= $ExecutionID
+				SERVICES = (New-Object PSObject)
 			}
 			
+
 #Loading dependencies!
 	ImportDependencieModule 'CacheManager'
 
@@ -89,6 +91,32 @@ $ErrorActionPreference = "stop";
 	if(!$VALUES.EXECUTION_ID){
 		$VALUES.EXECUTION_ID = ([Guid]::NewGuid()).Guid.ToString();
 	}
+	
+	
+#Some important functions...
+
+	#Services features!
+
+		#This parts will contains many routines allowing users use many services provided by cmdlet!
+		$SERVICES_NAMES	= @(
+				"getFileFromCache"
+			)
+
+		#Register a service!
+		Function RegisterService {
+			param($ServiceName, $Script)
+			
+			if( $SERVICES_NAMES -Contains $ServiceName){
+				
+				if($VALUES.SERVICES | gm -Type "ScriptMethod" -Name $ServiceName){
+					throw "SERVICE_ALREADY_REGISTERED: $ServiceName" 
+				}
+				
+				$VALUES.SERVICES | Add-Member -Type ScriptMethod -Name $ServiceName -Value $Script;
+			} else {
+				throw "SERVICE_NOT_DEFINED: $ServiceName"
+			}
+		}
 	
 	
 #Lets use Logging facilities provide by CustomMSSQL module...
@@ -200,6 +228,13 @@ $ErrorActionPreference = "stop";
 		$CacheManager.enabled = $false;
 	}
 	
+	#Register a service for customscript!
+	RegisterService getFileFromCache {
+			param($RemoteName)
+			
+			return $CacheManager.getFile($RemoteName);
+		}
+		
 	
 #Lets interpret zabbix server info
 	
@@ -778,6 +813,25 @@ Log "Script finished sucessfully. Adjust log level for more messages."
 					The folloing keys are created by default:
 						INSTANCE_NAME = Contains the instance name for which the script will connect to execute SQL scripts.
 						CUSTOM = Contains data passed on parameter $UserCustomData
+						
+				SERVICES
+					Contains a serie of routines that user can use to make something else provided by cmdlet.
+					This is a hashtable where each key a scriptblock providing some action.
+					The keys are documented here.
+					
+						getFileFromCache
+							Returns a cached file. User can use this to bring custom files to local cache.
+							Parameters:
+								$RemoteName
+									Is the name of file to be cached.
+									If file is not a unc file, the script will return this same value.
+									
+							Return:
+								Return the path to file in local cache if is file can be cached.
+								If not, return the same parameter $RemoteName.
+								
+					The users script must allays test if routine has somehting.
+					The service key always must exists, but, if it $null, then, it not avaiable and user cannot call them.
 		
 	.EXAMPLE
 	
