@@ -130,6 +130,7 @@ Function SetFileLocking {
 }
 
 Function ChangeFileLockType {
+
 	param($Handle,$Type)
 	
 	$Action = "UnLock";
@@ -164,4 +165,88 @@ Function ChangeFileLockType {
 	
 	$s.lockType = $Type;
 	return $true;
+}
+
+#Thanks https://msdn.microsoft.com/en-us/library/system.io.packaging.package(v=vs.110).aspx
+Function CopyStream($source, $target) {
+    [int]$bufSize = 0x1000;
+    [byte[]]$buf =  New-Object byte[] $bufSize;
+    [int]$bytesRead = 0;
+
+	while ( ($bytesRead = $source.Read($buf, 0, $bufSize)) -gt 0){
+        $target.Write($buf, 0, $bytesRead);	
+	}
+}
+
+
+#Zip a directory...
+Function ZipDirectory {
+	param($FolderToZip, $FilePath = $null)
+
+
+	if(![IO.Directory]::Exists($FolderToZip)){
+		throw "DIRECOTRY_NOT_FOUND: $FolderToZip";
+	}
+
+
+	$FolderToPkg = Get-Item $FolderToZip;
+	$AllFolderFiles = gci $FolderToPkg.FullName -recurse -include "*" | ? {!$_.PsIscontainer};
+
+	#Creating a package...
+	try {
+		if($FilePath){
+			if(-not $FilePath -match '[\\/]'){
+				$FilePath = "$FolderToPkg\$FilePath"
+			}
+		} else {
+			$FilePath =  "$FolderToPkg.zip"
+		}
+
+		$Pkg = [System.IO.Packaging.Package]::Open($FilePath, [Io.FileMode]"Create" );
+	} catch {
+		throw "MAIN_PACKAGE_CREATION_FAILED: $_";
+		return $null;
+	}
+
+	try {
+		#For each files...
+		$AllFolderFiles |  %{
+			#Gets a relative path, that is, without driver name...
+			$RelativePath = '/'+(GetRelativePath $_.FullName -BaseDir ($FolderToPkg.FullName) -Slash);
+			
+			#Creating the uri that representa path to the file...
+			$URI =  New-Object URI($RelativePath,[UriKind]::Relative);
+
+			#Create the part that represents the file...
+			$FilePart = $Pkg.CreatePart($URI,[System.Net.Mime.MediaTypeNames+Application]::Octet);
+
+			#copy the source stream to the package stream!
+			try {
+				$SourceStream = New-Object IO.FileStream($_.FullName,"Open", "Read");
+
+				if(!$SourceStream){
+					throw "INVALID_STREAM_FOR: $_.FullName";
+				}
+
+				CopyStream -Source $SourceStream -Target ($FilePart.GetStream())
+			} finally {
+				if($SourceStream){
+					$SourceStream.close();
+				}
+			}
+			
+		}
+
+		$DeletePkg = $false;
+		return $FilePath;
+	} catch {
+		$DeletePkg = $true;
+		throw;
+	} finally {
+		$Pkg.close();
+
+		if($DeletePkg){
+			Remove-Item -Path $FilePath  -ea "SilentlyContinue" -force;
+		}
+	}
 }
