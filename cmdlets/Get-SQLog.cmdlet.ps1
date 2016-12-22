@@ -34,6 +34,9 @@ Function Get-SQLog {
 			
 		,#Calls to generate advanced reporting...
 			[switch]$ReportEx = $false			
+
+		,#Returns internal object, to be used in debugging purposes...
+			[switch]$ReturnsInternal = $false
 	)
 	
 	$ErrorActionPreference = "Stop";
@@ -230,16 +233,31 @@ Function Get-SQLog {
 	}
 	
 	#Getting computers names to collect...
-	$ComputersToCollect = $ListComputersToCollect.GetEnumerator() | %{$_.Value};
+	$Order = 2;
+	$ComputersToCollect = $ListComputersToCollect.GetEnumerator() | %{
+		$Current = $_.Value;
+		
+		#Determine order... We must guaranteee the currently computer is collected first.
+		#This is because with this, we guarantee that with a single command we collect all cluster log nodes...
+		#If it fails, then we will attempt collect on each node...
+		if($Env:ComputerName -eq $Current.ComputerName){
+			$Current.CollectOrder = 1;
+			$Current.IsCurrent = $true;
+		} else {
+			$Current.CollectOrder = $Order++;
+		}
+	
+		#Returns current object to pipeline...
+		$Current;
+	};
 
-	#Colleting events on each computer....
-	$ClustersCollectedLog = @();
 
-	$ComputersToCollect | %{
+	$ComputersToCollect | sort CollectOrder | %{
 		$CurrentComputer = $_
 		try {
 			$Log | Invoke-Log "Connecting on $($CurrentComputer.ComputerName) to collect windows logs..." "PROGRESS"
 			
+			$Log | Invoke-Log "	Getting windows events..." "PROGRESS";
 			$error.clear()
 			$LogEvents  =  Get-WinEvent  -FilterHashtable $LogFilters -ComputerName $CurrentComputer.ComputerName -ErrorAction "SilentlyContinue" | SELECT LogName,TimeCreated,Id,Level,LevelDisplayName,ProviderId,ProviderName,MachineName,Message;
 		
@@ -258,37 +276,105 @@ Function Get-SQLog {
 
 			#Attempts collect errorlog of cluster...
 			if($CurrentComputer.CollectClusterLog){
-				#Just make some cluster log collection if current computer where scripts runs is part of a cluster...
-				if($Env:ComputerName -eq $CurrentComputer.ComputerName){
-					$Log | Invoke-Log "	Script will attempt collect cluster log of all nodes from current cluster..." "PROGRESS";
+				try{
+					$LogBaseName = (RemoveInvalidPathChars $CurrentComputer.ComputerName);
+					$Destination = $SaveToClusterLog
+					
+					
+					#Calculates timespan...
+					$FilterTimeSpan = [int]((Get-Date)-$FilterStartTime).totalMinutes;
 
-					try{
-						$LogBaseName = (RemoveInvalidPathChars $CurrentComputer.ComputerName);
-						$Destination = $SaveToClusterLog
+
+					$Log | Invoke-Log "	Destination: $Destination. TimeSpan: $FilterTimeSpan minutes" "DETAILED";
+
+
+					#Just make some cluster log collection if current computer where scripts runs is part of a cluster...
+					if($Env:ComputerName -eq $CurrentComputer.ComputerName){
+						$Log | Invoke-Log "	Script will attempt collect cluster log of all nodes from current node..." "PROGRESS";
 						
-						#Calculates timespan...
-						$FilterTimeSpan = [int]((Get-Date)-$FilterStartTime).totalMinutes;
+						#Attempts collect all cluster nodes log...
+						try {
+							import-module FailoverClusters -force;
+							$CurrentNodes = Get-ClusterNode | %{$_.Name};
+				
+							$Log | Invoke-Log "	 Calling Get-ClusterLog..." "DETAILED";
+							$AllLogs = Get-ClusterLog -Destination $Destination -Span $FilterTimeSpan
 
+							$CurrentComputer.debug.add("CLUSTERLOG_ALLLOGS", $AllLogs);
 
-						$Log | Invoke-Log "	Destination: $Destination. TimeSpan: $FilterTimeSpan minutes" "DETAILED";
-
-						#Build params and script fot ger cluster log!
-						$ScriptParams = @{Destination=$Destination;TimeSpan=$FilterTimeSpan;IsRemote=$false};
-						$CollectionScript = { 
-								param($Params)
-								import-module FailoverClusters -force;
-								
-								$Log = Get-ClusterLog -Destination $Params.Destination -Span $Params.TimeSpan
+							#Marks all nodes as collected! Note that will use previous hashtable with all objects... this is more fast to find...
+							$CurrentNodes | %{ $ListComputersToCollect[$_].ClusterLogCollected = $true  };
+						} catch {
+							$CurrentComputer.errors += $_;
+							$Log | Invoke-Log "	Failed to collect cluster log for all nodes on this node: $_" "PROGRESS";
 						}
+					} else {
+						if($CurrentComputer.ClusterLogCollected){
+							$Log | Invoke-Log "	 Cluster log for this computer already collected..." "DETAILED";
+						} else {
+							$Log | Invoke-Log "	 Script will attempt collect cluster log remotelly..." "DETAILED";
 
-						& $CollectionScript $ScriptParams
-					}catch{
-						$CurrentComputer.Errors += $_;
-						$Log | Invoke-Log "	Failed to collect cluster log on $($_.ComputerName): $_";
+							#The logic is simple: Generate cluster log and return a path to it.
+							#Then, uses Local2RemoteAdmin to generate a remote version of file.
+							#This is because when copying inside remote command, access denfied is generated.
+							#This, probally, is because some issue with credential delegations (its need another login to conenct remotelly...)
+
+							$ScriptToCollect = {
+								param($Params)
+				
+								$ErrorActionPreference="Stop";
+								$ResultInfo = New-Object PSObject -Prop @{error=$null;logpath=$null}
+
+								try {	
+									import-module FailoverClusters;
+									$Log = Get-ClusterLog -Span $Params.TimeSpan -Node $Env:ComputerName;
+									$ResultInfo.logpath = $Log.FullName;
+								} catch {
+									$ResultInfo.error = $_;
+								}
+							
+								return $ResultInfo;
+							}
+
+							$ScriptParams = @{TimeSpan=$FilterTimeSpan};
+						
+							try {	
+								$Log | Invoke-Log "	Invoking remote script..." "DETAILED";
+								$Result = Invoke-Command -ComputerName $CurrentComputer.ComputerName -ScriptBlock $ScriptToCollect -ArgumentList $ScriptParams
+							} catch {
+								throw "INVOKE_COMMAND_ERROR:_";
+							}
+							
+							if($Result.error){
+								$CurrentComputers.Errors += $Result.error;
+								$Ex = New-Object Exception("REMOTE_SCRIPT_ERROR: $($Result.error)",  $Result.error);
+								throw $ex;
+							}
+							
+							
+							if(!$Result.logpath){
+								throw 'INVALID_CLUSTERLOG_REMOTENODE_PATH';
+							}
+
+							#At this point we have the remote path, just copy it...
+							try {	
+								$DestinationFromRemote = $SaveToClusterLog+'\'+$LogBaseName+'_cluster.log';
+								$RemotePath = Local2RemoteAdmin $Result.logpath $CurrentComputer.ComputerName;
+								$Log | Invoke-Log "	Copying from $RemotePath ($($Result.logpath)) to $DestinationFromRemote" "DETAILED";
+								copy $RemotePath $DestinationFromRemote -force;
+							} catch {
+								throw "REMOTE_COPY_FAILED:  Original: $($Result.logpath) RemotePath: $RemotePath Error: $_"
+							}
+
+							$Log | Invoke-Log "	Collected sucessfully. Marking as collected!" "DETAILED";
+							$CurrentComputer.ClusterLogCollected = $true;
+						}
 					}
-				} else {
-					$Log | Invoke-Log "	Cluster log collection available only when scripts runs a node of cluster..." "VERBOSE";
-				}
+					
+				}catch{
+					$CurrentComputer.Errors += $_;
+					$Log | Invoke-Log "	Failed to collect cluster log on $($CurrentComputer.ComputerName): $_";
+				} 
 			}
 		} catch {
 			$CurrentComputer.Errors += $_;
@@ -366,6 +452,11 @@ Function Get-SQLog {
 
 	
 	$Log | Invoke-Log "Script executed successfuly!!!" "PROGRESS";
+
+	if($ReturnsInternal){
+		return (Import-CliXML $InternalFile); 
+	}
+
 	return;
 		
 	<#

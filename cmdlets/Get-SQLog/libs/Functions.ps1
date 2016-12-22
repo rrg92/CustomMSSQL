@@ -75,8 +75,20 @@ Function NewComputerinfo {
 			#The server name of the instance! @@SERVERNAME
 			CollectClusterLog = $false
 
+			#this indicates that cluster node for this onde already collected.
+			ClusterLogCollected = $false
+
+			#indicates that this is currently computer!
+			IsCurrent = $false;
+
+			#Controls the order of this computer on collectio process...
+			CollectOrder = 0
+
 			#Exceptions and errors encountered in process...
 			Errors = @()
+
+			#debug data...
+			debug = @{};
 		}
 
 }
