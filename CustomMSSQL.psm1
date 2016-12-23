@@ -1,6 +1,18 @@
-param($CmdLetsDir = ".\cmdlets", $AuxDir = ".\helpers", $ModulesDir = ".\modules")
+param($CmdLetsDir, $AuxDir, $ModulesDir , [switch]$DebugMode = $false)
 
 #For detailed informations about structure and internals about this code check !Help.txt file in module root directory.
+
+if(!$CmdLetsDir){
+	$CmdLetsDir = '.\cmdlets'
+}
+
+if(!$AuxDir){
+	$AuxDir = '.\helpers'
+}
+
+if(!$ModulesDir){
+	$ModulesDir = '.\modules'
+}
 
 $ErrorActionPreference ="Stop"
 #Save current location
@@ -47,7 +59,7 @@ $GMV.add("CURRENT_MODULE",$currentModule);
 
 try {
 	gci "$AuxDir\*.aux.ps1" | %{
-		write-verbose "Calling auxiliar file: $($_.FullName)"
+		if($DebugMode){write-host "Calling auxiliar file: $($_.FullName)"}
 		. $_.FullName
 	}
 
@@ -55,7 +67,7 @@ try {
 	$ExportedFunctions += Get-Command | where {$_.Module.Path -eq $CurrentModule.Path} | %{$_.Name}
 	
 	gci "$CmdLetsDir\*.cmdlet.ps1" | %{
-		write-verbose "Calling cmdlet file: $($_.FullName)"
+		if($DebugMode){write-host "Calling cmdlet file: $($_.FullName)"}
 		. $_.FullName
 	}
 	
