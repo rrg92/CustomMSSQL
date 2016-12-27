@@ -265,7 +265,7 @@ Function Format-SQLogs {
 		
 		if($AllErrors){
 			write-host "Exporting errors"
-			$AllLogEntries | ExportXLSX -Append -WorkSheetName 'Errors' -Path "$OutputBaseDir\ReportEx.xlsx"
+			$AllErrors | ExportXLSX -Append -WorkSheetName 'Errors' -Path "$OutputBaseDir\ReportEx.xlsx"
 		}
 		
 	
@@ -322,5 +322,5 @@ Function NewLogCollector {
 Function NewErrorLine {
 	param($file,$num,$Line, $Error)
 	
-	return New-Object PsObject @{file=$file;num=$num;line=$line;error=$Error};
+	return New-Object PsObject -Prop @{file=$file;num=$num;line=$line;error=$Error};
 }
