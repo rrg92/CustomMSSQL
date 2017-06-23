@@ -247,17 +247,24 @@ Function Format-SQLogs {
 			}
 		}
 		
+		ImportDependencieModule 'ImportExcel'
+		
 		if($AllLogEntries){
+			
+			
 			$total = $AllLogEntries.count;
 			write-host "Exporting logs... (Total entries: $($total))"
 			$Start = Get-Date;
 			if($ShowProgress){
 				$i = [decimal]0;
 				$AllLogEntries | %{$i++; $percent = [int](($i/$total)*100.00); write-progress -Activity 'Exporting logs' -PercentComplete $percent -Status "($i/$total) exported [$percent%]"
-					$_} | ExportXLSX -WorkSheetName 'Logs' -Path "$OutputBaseDir\ReportEx.xlsx"
+					$_} | Export-Excel -WorkSheetName 'Logs' -WorkSheetName 'Logs' -Path "$OutputBaseDir\ReportEx.xlsx"
 			} else {
 	
-				$AllLogEntries | ExportXLSX -WorkSheetName 'Logs' -Path "$OutputBaseDir\ReportEx.xlsx"
+
+				$AllLogEntries | Export-Excel -WorkSheetName 'Logs' -TableName 'Logs' -Path "$OutputBaseDir\ReportEx.xlsx"
+
+				
 			}
 			
 			write-host "Export time: $( (Get-Date)-$Start )";
@@ -265,7 +272,7 @@ Function Format-SQLogs {
 		
 		if($AllErrors){
 			write-host "Exporting errors"
-			$AllErrors | ExportXLSX -Append -WorkSheetName 'Errors' -Path "$OutputBaseDir\ReportEx.xlsx"
+			$AllErrors |  Export-Excel -WorkSheetName 'Errors' -Path "$OutputBaseDir\ReportEx.xlsx"
 		}
 		
 	
