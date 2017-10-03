@@ -2,6 +2,9 @@
 All important changes to this project will be added to this file!
 This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 
+## [0.6.11] - 2017-06-23
+### Changed
+- Updated CacheManager to 0.1.0
 
 ## [0.6.10] - 2017-06-23
 ### Changed
