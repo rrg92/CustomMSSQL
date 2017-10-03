@@ -81,16 +81,3 @@ This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 ### Changed
 - The module psd1 file was updated to correct version!
 
- 0.6.10]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.10
-[0.6.9]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.9
-[0.6.8]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.8
-[0.6.7]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.7
-[0.6.6]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.6
-[0.6.5]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.5
-[0.6.4]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.4
-[0.6.3]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.3
-[0.6.2]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.2
-[0.6.1]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.1
-[0.6.0]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.0
-[0.5.2]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.5.2
-[0.5.1]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.5.1
