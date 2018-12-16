@@ -2,6 +2,9 @@
 All important changes to this project will be added to this file!
 This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 
+## [0.7.10] - 2017-06-23
+### Changed
+- (Send-SQL2Zabbix) 
 
 ## [0.6.10] - 2017-06-23
 ### Changed
@@ -78,7 +81,8 @@ This changelog will be based on [Keep a change log](http://keepachangelog.com/)
 ### Changed
 - The module psd1 file was updated to correct version!
 
- 0.6.10]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.10
+[0.6.11]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.11
+[0.6.10]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.10
 [0.6.9]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.9
 [0.6.8]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.8
 [0.6.7]: https://github.com/rrg92/CustomMSSQL/releases/tag/0.6.7

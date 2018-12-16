@@ -7,6 +7,7 @@ Function Send-SQL2Zabbix {
 		,#This are the Keys Definitions. The Keys Definitions are a powershell hashtable.
 		 #It defines which items will be send to server and the query that generate values.
 		 #You can pass a path to the powershell ps1 file or a hahstable directly.
+		 #Check about cmdlet to more info on usage!
 			[Object]$KeysDefinitions
 			
 		,#This is zabbix server. Specify host. You can speicy a port by appending ":" at end of.
@@ -67,6 +68,20 @@ Function Send-SQL2Zabbix {
 		,#Storare area. This is folder where the scirpt will implements storage area.
 		 #The storage area is a place where will persit values used with STORAGE AREA SERVICE.
 			$StorageArea = $null
+			
+		,[switch]$DebugMode = $false
+		,$DebugOpts = @{}
+
+
+		,#Disables the source cache. Source keys with same name will always executed.
+		 #By default, each time the script loops in keys definitions, keys that have same source string, not will execute twice.
+		 #This will sabe resources!
+		 [switch]$DisableSourceCache = $false
+
+		 ,#This will ingore pooling times less than -PoolingTime parameter.
+		  #By default, cmdlet sleeps by a minimum of (All keys pooling time).
+		  #If this specified, the script willl sleep fixed in value of "PoolingTime"
+		[switch]$FixedPoolingTime = $false
 	)
 
 $ErrorActionPreference = "stop";
@@ -84,7 +99,8 @@ $ErrorActionPreference = "stop";
 				PARAMS					= (GetAllCmdLetParams)
 				USER 					= @{INSTANCE_NAME=$Instance;CUSTOM=$UserCustomData}
 				EXECUTION_ID			= $ExecutionID
-				SERVICES = (New-Object PSObject)
+				SERVICES 				= (New-Object PSObject)
+				REAL_POOLING_TIME		= $PoolingTime
 			}
 			
 
@@ -331,7 +347,7 @@ $ErrorActionPreference = "stop";
 		$VALUES.ZABBIX.PORT = 10051
 	}
 	
-	Log "	Server is: $($VALUES.ZABBIX.SERVER) Port is: $($VALUES.ZABBIX.PORT)"
+	Log "	Zabbix Server is: $($VALUES.ZABBIX.SERVER) Port is: $($VALUES.ZABBIX.PORT)" "PROGRESS"
 	
 	
 #This is all functions responsible for getting keys and determing which is sql source or powershell source...
@@ -378,6 +394,7 @@ $ErrorActionPreference = "stop";
 		return $AllKeysDefintions;
 	}
 	
+	
 	#Thus function will resolve need keys for collect and associated execution engine (eg: sql script or powershell script block).
 	Function UpdateKeysFinal {
 		param($KeysForGet, $Logging = "VERBOSE")
@@ -388,13 +405,109 @@ $ErrorActionPreference = "stop";
 			$KeyName 		= $k.Key;
 			$KeySourceFull	= $k.Value;
 			$KeySource		= @{}
-			
-			Log "	Key: $KeyName" $Logging
-			
+			$isLLD 			= $false;
+			$isScript 		= $false;
+			$LLDProps		= $null;
 			$isLLD = $false;
-			if($KeyName -like "LLD:*"){
-				$KeyName = $KeyName -replace '^LLD:',''
-				$isLLD = $true;
+			$KeyPoolingTime = $PoolingTime;
+			$KeyMaxTries	= 1
+			$KeyDefault		= $null
+			$KeyParams		= @{}
+			$TriePooling	= 0
+
+			Log "	Full Key Name: $KeyName" $Logging
+			
+			
+			if($KeyName -match '^(.+)(\|.+)$'){
+				$KeyNameParts = $matches[2] -split '\|\s*';
+				$KeyName = $matches[1].trim();
+
+				if($KeyNameParts[1]){
+					$ParamParts = $KeyNameParts[1] -Split '-';
+
+					$ParamParts | ? {$_} | %{
+							$ParamNameValue = $_ -split ' ';
+							$ParamName = $ParamNameValue[0];
+							$ParamValue = $ParamNameValue[1];
+							$KeyParams[$ParamName] = $ParamValue;
+					}
+
+				}
+				
+			}
+
+			
+
+			#Pooling time
+			if($KeyParams["P"]){
+				#If number!
+				$KeyPoolingTime = $KeyParams["P"] -as [int];
+
+				if(!$KeyPoolingTime){
+					$PoolingTimeSpan 	=  $KeyParams["P"] -as [timespan];
+
+					if($PoolingTimeSpan){
+						$KeyPoolingTime		= $PoolingTimeSpan.totalMilliseconds;
+					} else{
+						Log " The pooling time specified for $KeyName is not valid! The default will be used. Value specified: $($KeyParams.P)" $Logging
+					}
+				}
+			}
+			Log "		PoolingTime: $KeyPoolingTime" $Logging
+
+			#Defaylt
+			if($KeyParams["D"]){
+				$KeyDefault = $KeyParams["D"]
+
+				if($KeyDefault.Length -eq 0 ){
+					$KeyDefault = $null;
+				}
+
+				Log "		Default: $KeyDefault" $Logging
+			}
+
+			#Tries
+			if($KeyParams["T"]){
+				$KeyMaxTries = $KeyParams["T"] -as [int]
+
+				if(!$KeyMaxTries){
+					$KeyMaxTries = 1
+				}
+
+				Log "		MaxTries: $KeyMaxTries" $Logging
+			}
+
+			#Tries Pooling Time
+			if($KeyParams["TP"]){
+				#If number!
+				$TriePooling = $KeyParams["TP"] -as [int];
+				
+				if(!$TriePooling){
+					$TriePoolingTimeSpan 	=  $KeyParams["TP"] -as [timespan];
+
+					if($TriePoolingTimeSpan){
+						$TriePooling		= $TriePoolingTimeSpan.totalMilliseconds;
+					} else{
+						Log " The trie pooling time specified for $KeyName is not valid! The default will be used. Value specified: $($KeyParams.TP)" $Logging
+					}
+				}
+			}
+			Log "		PoolingTime: $TriePooling" $Logging
+
+			#If key name is a scriptblock!
+			if($KeyName -is [scriptblock]){
+				$isScript = $true;
+			} else {
+				if($KeyName -like "LLD:*"){
+					$KeyName = $KeyName -replace '^LLD:',''
+					
+					if($KeyName -match '^([^:]+):(.+)'){
+						$LLDProps 	= $matches[1] -Split ',';
+						$KeyName 	= $matches[2]
+					}
+
+					$isLLD = $true;
+				}
 			}
 
 			$SourceType = "SQL";
@@ -445,13 +558,24 @@ $ErrorActionPreference = "stop";
 			$KeySource.add("TYPE",$SourceType);
 
 
-			Log "	Source Type: $SourceType Source: $($KeySource.SOURCE)" $Logging
+			Log "	KeyName: $KeyName  SourceType: $SourceType Source: $($KeySource.SOURCE)" $Logging
 			
 			$AllKeysFinal += New-Object PSObject -Prop @{
 												KEY 		= $KeyName
 												SOURCE		= $KeySource
 												isLLD		= $isLLD
-										}
+												LLDProps	= $LLDProps
+												isKeyScript	= $isScript
+												PoolingTime 	= $KeyPoolingTime
+												DefaultValue 	= $KeyDefault
+												MaxTries		= $KeyMaxTries
+												TriePooling		= $TriePooling
+
+												info = (New-Object PsObject -Prop @{
+													nextExec 	= ([datetime]'1900-01-01')
+													tries		= 0
+												})
+											}
 		}
 		
 		return $AllKeysFinal;
@@ -459,13 +583,14 @@ $ErrorActionPreference = "stop";
 	}
 
 	Log "Evaluating keys file..."
-	$KeysForGet = (UpdateKeysForGet -KeysDefinitions $KeysDefinitions "PROGRESS") 
-	$KeysFinal = (UpdateKeysFinal -KeysForGet $KeysForGet "PROGRESS") 
+	$KeysForGet = UpdateKeysForGet -KeysDefinitions $KeysDefinitions "PROGRESS"
+	$KeysFinal = UpdateKeysFinal -KeysForGet $KeysForGet "PROGRESS"
 	$LastReloadTime = Get-Date
+	Log "Start (real) pooling time: $($VALUES.REAL_POOLING_TIME)" "PROGRESS"
 	
 Log "User data: "
 foreach($UserData in $VALUES.USER.GetEnumerator()){
-	Log "$($UserData.Key): $($UserData.Value)" "PROGRESS"; 
+	Log "	$($UserData.Key): $($UserData.Value)" "PROGRESS"; 
 }
 	
 Log "Entering on main loop"
@@ -476,7 +601,7 @@ do {
 		Log "Reloading keys" "VERBOSE"
 		try {
 			$KeysForGet = (UpdateKeysForGet -KeysDefinitions $KeysDefinitions)
-			$KeysFinal = (UpdateKeysFinal -KeysForGet $KeysForGet)
+			$KeysFinal = UpdateKeysFinal -KeysForGet $KeysForGet
 			$LastReloadTime = (Get-Date)
 		} catch {
 			$FormattedError = (FormatPSException $_)
@@ -484,33 +609,119 @@ do {
 		}
 	}
 
-	$DataForSend = @()
+	$Key2Send 	= @()
+	$LLD2Send		= @();
+	$SourceCache	= @{};
 
 	Log "	Looping through keys" "VERBOSE"
 	:KeysFinal foreach($k in $Keysfinal){
 		$queryResults = $null;
 		
-		Log "		Executing source for key $($k.KEY)" "VERBOSE"
-		try {
-			if($k.SOURCE.TYPE -eq "SQL"){
-				$queryResults = Invoke-NewQuery -ServerInstance $Instance -Query $k.SOURCE.QUERY -AppName $SQLAppName
-			}
-			elseif($k.SOURCE.TYPE -eq "PS") {
-				$queryResults = @(& $k.SOURCE.SCRIPT $VALUES)
-				if($queryResults.count -eq 1 -and  $queryResults[0] -ne $null -and $queryResults[0].getType().Name -ne "PSCustomObject"){
-					$queryResults = New-Object PSObject -Prop @{ "__results" = $queryResults}
+		Log "		# Key $($k.KEY)" "VERBOSE"
+
+		$ExecStart = Get-Date;
+		if($k.info.nextExec -le $ExecStart){
+			$k.info.nextExec = $ExecStart.AddMilliseconds($k.PoolingTime);
+
+			# Check if pooling time must be updated!
+			if(!$FixedPoolingTime){
+				$NextLeftMs = ($k.info.nextExec - $ExecStart).totalMilliseconds;
+				if( $VALUES.REAL_POOLING_TIME -gt $NextLeftMs -or $VALUES.REAL_POOLING_TIME -eq 0  ){
+					$PrevPoolingTimeSpan = [timespan]::FromMilliseconds($VALUES.REAL_POOLING_TIME).toString("hh\:mm\:ss\.fff");
+					$VALUES.REAL_POOLING_TIME = $NextLeftMs;
+					$NewPoolingTimeSpan = [timespan]::FromMilliseconds($VALUES.REAL_POOLING_TIME).toString("hh\:mm\:ss\.fff");
+
+					if( $Log.LogLevel -eq "VERBOSE" ){
+						Log "Real pooling time was changed! Previous: $PrevPoolingTimeSpan New: $NewPoolingTimeSpan" "VERBOSE"
+					}
 				}
-			} else {
-				throw "INVALID_SOURCE_TYPE: $($k.SOURCE.TYPE)"
 			}
-		} catch {
-			$FormattedError = (FormatPSException $_)
-			Log "			Error when executing query for key $($k.KEY): $FormattedError" "PROGRESS"
+
+			if( $Log.LogLevel -eq "VERBOSE" ){
+				Log "			New exec time calculated! Next execution time: $($k.info.nextExec)" "VERBOSE";
+			}
+
+			$k.info.tries = 0;
+		} else {
+			if( $Log.LogLevel -eq "VERBOSE" ){
+				Log "			Key pooling time not expired. Next execution time: $($k.info.nextExec). Current:$ExecStart" "VERBOSE";
+			}
+
+			continue :KeysFinal;
+		}
+
+		$SourceString = $K.SOURCE.Source.toString();
+		if( !$DisableSourceCache -and $SourceCache.Contains($SourceString) ){
+			Log "			Getting from cache!" "VERBOSE"
+			$queryResults = $SourceCache[$SourceString]
+		} else {
+			Log "			Executing source!" "VERBOSE"
+			
+				$ValueDetermined = $false;
+				while(!$ValueDetermined){
+					$k.info.tries++;
+
+					try {
+						
+						
+							if($k.SOURCE.TYPE -eq "SQL"){
+								$queryResults = Invoke-NewQuery -ServerInstance $Instance -Query $k.SOURCE.QUERY -AppName $SQLAppName
+							}
+							elseif($k.SOURCE.TYPE -eq "PS") {
+								$queryResults = @(& $k.SOURCE.SCRIPT $VALUES)
+								if($queryResults.count -eq 1 -and  $queryResults[0] -ne $null -and $queryResults[0].getType().Name -ne "PSCustomObject"){
+									$queryResults = New-Object PSObject -Prop @{ "__results" = $queryResults}
+								}
+							} else {
+								$k.info.tries = $k.MaxTries + 1;
+								throw "INVALID_SOURCE_TYPE: $($k.SOURCE.TYPE)";
+
+							}
+						
+						$ValueDetermined = $true;
+						$SourceCache[$SourceString] = $queryResults;
+					} catch {
+						if( $k.info.tries -ge $k.MaxTries ){
+
+							$FormattedError = (FormatPSException $_)
+							Log "			Error when executing script for key $($k.KEY): $FormattedError" "PROGRESS"
+							if($k.DefaultValue -ne $null){
+								Log "				Using default value!" "PROGRESS"
+								$queryResults = New-Object PSObject -Prop @{ "__results" = $k.DefaultValue};
+								$ValueDetermined = $true;
+							} else {
+								$ValueDetermined = $true;
+								continue :KeysFinal;
+							}
+						} else {
+
+							if( $Log.LogLevel -eq "VERBOSE" ){
+								$FormattedError = (FormatPSException $_)
+								Log "			Error ocurred. Retrying. Tries:$($k.info.tries) MaxTries:$($k.MaxTries). TriePooling:$($k.TriePooling) Error: $FormattedError" "VERBOSE";
+							}
+
+							if($k.TriePooling -gt 0){
+								Start-Sleep -m $k.TriePooling 
+							}
+
+						}
+					}
+				}
+
+		}
+
+		if(!$queryResults){
+			Log "		Query dont return any result or meta-data!" "VERBOSE"
 			continue :KeysFinal;
 		}
 		
-		if(!$queryResults){
-			Log "		Query dont return any result or meta-data!" "VERBOSE"
+		if($k.isKeyScript){
+			Log "		Key is script! Executing script!" "VERBOSE"
+			try {
+				$queryResults | %{$Key2Send += '- ' + (. $k.key) }
+			} catch {
+				Log "			Error processing key script $($k.key)" "PROGRESS"
+			}
 			continue :KeysFinal;
 		}
 		
@@ -519,8 +730,12 @@ do {
 		if($k.isLLD){
 			Log "			This key is a LLD mode! Result query will be converted to a zabbix JSON LLD format." "VERBOSE"
 			try {
+				if($k.LLDProps){
+					$queryResults = $queryResults | SELECT-OBJECT $k.LLDProps;
+				}
+
 				$r =  ConvertTo-ZabbixLLD $queryResults;
-				$DataForSend += "- $($k.KEY) $r";
+				$LLD2Send += "- $($k.KEY) $r";
 				continue :KeysFinal;
 			} catch {
 				Log "			Error when generating JSON for LLD KEY $($k.KEY): $_" "PROGRESS"
@@ -579,7 +794,7 @@ do {
 				$r = $row.$ColumnName;		
 				if(!$r){$r = 0;}
 				$realKeyNameForData = $realKeyName.replace("?",$ColumnName);
-				$DataForSend += "- $realKeyNameForData $r"
+				$Key2Send += "- $realKeyNameForData $r"
 				Log "				Column: $ColumnName | Real Key: $realKeyNameForData Data: $r" "VERBOSE"			
 			}
 			
@@ -600,6 +815,9 @@ do {
 	$SenderParams | %{
 		Log "		$_" "VERBOSE"
 	}
+
+	#Puts LLD first!
+	$DataForSend = $LLD2Send + $Key2Send;
 	
 	Log "	Sending data..." "VERBOSE"
 	try{
@@ -610,7 +828,14 @@ do {
 			#logging info.
 			$BulkDataSend = ($DataForSend -Join "`r`n");
 			
-			Log "		ITEMS TO BE SENT: $($DataForSend.count)" "VERBOSE"
+			if($DebugMode){
+				if($DebugOpts.BULKOUT){
+					$BulkDataSend | Set-Content $DebugOpts.BULKOUT -Encoding "UTF8";
+				}
+			}
+			
+			Log "		ITEMS TO BE SENT: $($DataForSend.count)" "DEBUG"
+			Log "		LENGTH OF DATA: $($BulkDataSend.Length)" "DEBUG"
 			Log "		DATA THAT WILL BE SEND: `r`n$BulkDataSend" "VERBOSE"
 			
 			# Sending data to server
@@ -630,7 +855,7 @@ do {
 			# Getting time info for informational and debugging purposes.
 			if($LastSend){
 				$TimeElpased = ((Get-Date)-$LastSend).totalMilliseconds
-				Log "Elapsed ms: $TimeElpased" "VERBOSE"
+				Log "Elapsed ms: $TimeElpased" "DEBUG"
 			}
 			$LastSend		= (Get-Date)
 		} else {
@@ -642,7 +867,7 @@ do {
 	}
 	
 	#Command will returns something like this: 
-	Log "	Server response: $Response" "VERBOSE"
+	Log "	Server response: $Response" "DEBUG"
 	
 	#This is object that we use to store all informaton about response and results.
 	$Result = New-Object PSObject -Prop @{
@@ -733,11 +958,15 @@ do {
 		}
 	}
 	
-	if($PoolingTime){
-		Log "	Sleeping for $PoolingTime ms" "VERBOSE"
-		Start-Sleep -Milliseconds $PoolingTime
+	
+	if($VALUES.REAL_POOLING_TIME){
+		if($Log.LogLevel -eq "VERBOSE"){
+			$RealPoolingTimeSpan = [timespan]::FromMilliseconds($VALUES.REAL_POOLING_TIME).toString("hh\:mm\:ss\.fff");
+			Log "	Sleeping for  $RealPoolingTimeSpan ($($VALUES.REAL_POOLING_TIME) ms)" "VERBOSE";
+		}	
+		Start-Sleep -Milliseconds $VALUES.REAL_POOLING_TIME
 	}
-} while($PoolingTime)
+} while($VALUES.REAL_POOLING_TIME)
 
 Log "Script finished sucessfully. Adjust log level for more messages."
 
@@ -748,8 +977,8 @@ Log "Script finished sucessfully. Adjust log level for more messages."
 		
 	.DESCRIPTION
 	
-		The Send-SQL2Zabbix is used to execute a SQL query and send results to a Zabbix Server.
-		This allows create custom monitoring counters and items based on queries results.
+		The Send-SQL2Zabbix is used to execute a SQL query, or powershell scripts, and send results to a Zabbix Server.
+		This allows create custom monitoring counters and items based on queries/script results.
 		The script relies of zabbix_sender tool included in Zabbix product. 
 		The items must be created as "Zabbix Trapper" to receive the values correctly.
 		
@@ -762,9 +991,9 @@ Log "Script finished sucessfully. Adjust log level for more messages."
 			
 		The keys files is just a simple powershell script that returns a hashtable. The hashtable have following format:
 		
-			"<Item>" = "<COLUMNS>::<SQL>"
+			<Item> = "<COLUMNS>::<SQL>"
 			or
-			"<Item>" = {SCRIPTBLOCK}
+			<Item> = {SCRIPTBLOCK}
 			
 		This means that you can specify SQL scripts or powershell custom script blocks. The script must return a array of object.
 		The script will access the "Noteproperty" members of eah object returned. In the case of SQL Scripts, the cmdlet will transform query results in a valid Object, where each row is a object and each column is a noteproperty of row.
@@ -777,83 +1006,107 @@ Log "Script finished sucessfully. Adjust log level for more messages."
 				The item name. This is same name as you configured on ZabbixServer.
 				You can specify any string. The string must match the string configued on zabbix server.
 				
-				You can use special character "?". When script finds a "?" on item it can do some replaces on them.
-				If you specify a "?" alone, the script will replace the "?" by the property name returned.
-				For example, if query returns a column called "PageCount" and item is "mssql.database[MyDb,?]", the key name will be "mssql.database[MyDB,PageCount]".
-				If you specify a query that returns multiples columns, the script will duplicate the key, one for each column.
-				For example, consider following key definition:
+				This can be a string or scriptblock.
 				
-					"mssql.instanceInfo[?]" = "select cpu_count,scheduler_count from sys.dm_os_sys_info"
-				
-				The script will generate this keys to be send to zabbix:
-				
-					"mssql.instance[cpu_count]" and "mssql.instance[scheduler_count]"
-				
-				Each key, will have the column value.
-				Note that in this examples, we are considering queries that returns a single row only.
-				For queries that returns multiple rows, you must take some cautions. For example:
-				
-					"mssql.database[?]" =  "select state from sys.databases"
+				Scriptblock items keys
 					
-				The query above will returns multiple rows, causing the same item "mssql.database[state]" to be generated.
-				This will cause error on script, because it prevent you create multiple items with same resolved name (the name after replacing "?")
-				But, in most cases, you want generate multiple from rows. For this case, you can use a variant of "?" placecholder.
-				If you specify "?" plus a 'property name' returned by script, the cmdlet will replace this placeholder by column value.
-				For example, consider this:
-				
-					"mssq.database[?name,state]" = "select name,state from sys.databases"
+					If you specify a scriptblock, we will execute this scriptblock for each object returned by script.
+					You must manually generate the "Key Value" string to be passed to zabbix_sender.
+					This is the fatests way and we encourage you to use this.
+					This was introduced on version 0.6.11.
 					
-				If the query returns 5 databases (one row for each), then five items will be generated. 
-				The "?name" placeholder will be replaced by value of "name" column. The item value will be value of state column.
-				NOTE: Remeber that cmdlet will transform rows in objects, and columns in "noteproperty" for each object, respectively.
-				Note that you can keep using "?" placeholder. Look at this:
-				
-					"mssql.database[?name,?]" = "select name,state,is_read_only from sys.databases"
-					
-				In this case, 10 items will be generated. For each row (database) the ?name will be replaced.
-				Then, for each left column, the "?" will be replaced. In this case, if databases are "master","model","tempdb","msdb"and "MyDB", the following items will be generated:
-				
-					mssql.database[master,state]
-					mssql.database[master,is_read_only]
-					mssql.database[model,state]
-					mssql.database[model,is_read_only]
-					mssql.database[tempdb,state]
-					mssql.database[tempdb,is_read_only]
-					mssql.database[msdb,state]
-					mssql.database[msdb,is_read_only]
-					mssql.database[MyDB,state]
-					mssql.database[MyDB,is_read_only]
-					
-				This allows you generate multiple items keys with single script, or, for example,in best words, single connection to the database. This can save resources.
-				This is possible thanks to the way how scripts handle multiple rows and columns. The general algorithm is:
-				
-					For each object returned,
-						First replace "? + PropertyName" placeholder by the value of "PropertyName" in current object and discard this property.
-						For the other properties that was returned, the script will duplicate item, and replace "?" for the property name. The property value will be the key value.
-
-				Then, when working with multiple objects and properties, considering correctly use of "?" placeholders syntax for avoiding errors of duplicates keys.
-				
-				The key name specified dont have a specific format. For convenience, use names like "mssql." or "sql.", following zabbix standards.
-				The replacement of placehdolers just search string, and don't require that it be between "[]". For example "mssql.?name.?" is valid and can be replaced.
-				Just, pay attention to the fact the generate key name here must match the key created for the target hostname in zabbix server.
-				
-				LOW LEVEL DISCOVERY MODE
-				
-					If you specify "LLD:" at begining of item name, then the script will take the query results and generate a Low Level Discovery JSON string.
-					The script just will get returned array object and represent it into a JSON format.
 					For example:
 					
-						"LLD:mssql.discoveryDatabases" = "SELECT name FROM sys.databases"
+						{"mssql.databases.recoverymodel[$($_.Name)] $($_.recovery_model)"} = "SELECT Name,recovery_model FROM sys.databases"
 						
-					If the databases returned are "master","model","tempdb","msdb", then this JSON will be generated:
+					The scritpblock will execute for reach object returned by sql script (aka, each row returned).
+					Then, the object can be accessed using "$_" special variable.
+					Then, you can use it to build the custom keus parts.
+					After key, you must put the value to be sent to zabbix_sender.
+					This is fastest as using string, because the engine will just loop over objects and calls your scripts.
 					
-						{"data":[{"{#NAME}":"master"},{"{#NAME}":"model"},{"{#NAME}":"tempdb"},{"{#NAME}":"msdb"}]}
-						
-					This value will be the value of "mssql.discoveryDatabases"
-					Note that in this mode, the "?" syntax will do not work for the corresponding key.
-					The cmdlet will cmdlet will change the case of properties names to UPPER, because this is required by LLD.
-					Check more about Low Level Discovery (LLD) at: https://www.zabbix.com/documentation/2.4/manual/discovery/low_level_discovery
+					You take control over duplicates keys.
+					This method is preferred if you script generate a lot of keys.
 				
+				String items keys
+				
+					You can use special character "?". When script finds a "?" on item it can do some replaces on them.
+					If you specify a "?" alone, the script will replace the "?" by the property name returned.
+					For example, if query returns a column called "PageCount" and item is "mssql.database[MyDb,?]", the key name will be "mssql.database[MyDB,PageCount]".
+					If you specify a query that returns multiples columns, the script will duplicate the key, one for each column.
+					For example, consider following key definition:
+					
+						"mssql.instanceInfo[?]" = "select cpu_count,scheduler_count from sys.dm_os_sys_info"
+					
+					The script will generate this keys to be send to zabbix:
+					
+						"mssql.instance[cpu_count]" and "mssql.instance[scheduler_count]"
+					
+					Each key, will have the column value.
+					Note that in this examples, we are considering queries that returns a single row only.
+					For queries that returns multiple rows, you must take some cautions. For example:
+					
+						"mssql.database[?]" =  "select state from sys.databases"
+						
+					The query above will returns multiple rows, causing the same item "mssql.database[state]" to be generated.
+					This will cause error on script, because it prevent you create multiple items with same resolved name (the name after replacing "?")
+					But, in most cases, you want generate multiple from rows. For this case, you can use a variant of "?" placecholder.
+					If you specify "?" plus a 'property name' returned by script, the cmdlet will replace this placeholder by column value.
+					For example, consider this:
+					
+						"mssq.database[?name,state]" = "select name,state from sys.databases"
+						
+					If the query returns 5 databases (one row for each), then five items will be generated. 
+					The "?name" placeholder will be replaced by value of "name" column. The item value will be value of state column.
+					NOTE: Remeber that cmdlet will transform rows in objects, and columns in "noteproperty" for each object, respectively.
+					Note that you can keep using "?" placeholder. Look at this:
+					
+						"mssql.database[?name,?]" = "select name,state,is_read_only from sys.databases"
+						
+					In this case, 10 items will be generated. For each row (database) the ?name will be replaced.
+					Then, for each left column, the "?" will be replaced. In this case, if databases are "master","model","tempdb","msdb"and "MyDB", the following items will be generated:
+					
+						mssql.database[master,state]
+						mssql.database[master,is_read_only]
+						mssql.database[model,state]
+						mssql.database[model,is_read_only]
+						mssql.database[tempdb,state]
+						mssql.database[tempdb,is_read_only]
+						mssql.database[msdb,state]
+						mssql.database[msdb,is_read_only]
+						mssql.database[MyDB,state]
+						mssql.database[MyDB,is_read_only]
+						
+					This allows you generate multiple items keys with single script, or, for example,in best words, single connection to the database. This can save resources.
+					This is possible thanks to the way how scripts handle multiple rows and columns. The general algorithm is:
+					
+						For each object returned,
+							First replace "? + PropertyName" placeholder by the value of "PropertyName" in current object and discard this property.
+							For the other properties that was returned, the script will duplicate item, and replace "?" for the property name. The property value will be the key value.
+
+					Then, when working with multiple objects and properties, considering correctly use of "?" placeholders syntax for avoiding errors of duplicates keys.
+					
+					The key name specified dont have a specific format. For convenience, use names like "mssql." or "sql.", following zabbix standards.
+					The replacement of placehdolers just search string, and don't require that it be between "[]". For example "mssql.?name.?" is valid and can be replaced.
+					Just, pay attention to the fact the generate key name here must match the key created for the target hostname in zabbix server.
+					
+					LOW LEVEL DISCOVERY MODE
+					
+						If you specify "LLD:" at begining of item name, then the script will take the query results and generate a Low Level Discovery JSON string.
+						The script just will get returned array object and represent it into a JSON format.
+						For example:
+						
+							"LLD:mssql.discoveryDatabases" = "SELECT name FROM sys.databases"
+							
+						If the databases returned are "master","model","tempdb","msdb", then this JSON will be generated:
+						
+							{"data":[{"{#NAME}":"master"},{"{#NAME}":"model"},{"{#NAME}":"tempdb"},{"{#NAME}":"msdb"}]}
+							
+						This value will be the value of "mssql.discoveryDatabases"
+						Note that in this mode, the "?" syntax will do not work for the corresponding key.
+						The cmdlet will cmdlet will change the case of properties names to UPPER, because this is required by LLD.
+						Check more about Low Level Discovery (LLD) at: https://www.zabbix.com/documentation/2.4/manual/discovery/low_level_discovery
+					
 			<COLUMNS>
 				This is the optional column list where the data come from. You can specify multiple columns separated by ",".
 				This is useful for use with stored procedures, where you can select just columns that you want work.

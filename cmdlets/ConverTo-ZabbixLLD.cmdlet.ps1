@@ -15,7 +15,12 @@ Function ConvertTo-ZabbixLLD {
 		$jsonProps = @()
 		$Object | gm -Type Noteproperty | %{
 			$PropName 	= $_.Name;
-			$PropValue	= $Object.$PropName;
+
+			if($PropValue -eq $null){
+				$PropValue = "";
+			}
+				
+			$PropValue	= $Object.$PropName.toString();
 			#Escaping special characters.
 			$PropValue	= $PropValue.replace("\","\\").replace('"','\"');
 			$jsonProps += """{#$($PropName.toUpper())}"""+":"+"""$PropValue"""
