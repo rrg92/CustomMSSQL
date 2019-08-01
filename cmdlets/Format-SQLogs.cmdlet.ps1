@@ -74,6 +74,55 @@ Function Format-SQLogs {
 						return $AllLogEntries;
 				}
 				
+		SQLLOG = NewLogCollector "$Source\sql" {
+						
+						#The winevents must contain all exported xml log entries!
+						$AllLogEntries = @()
+						gci $this.BaseFolder | %{
+							try {
+								write-host "	Reading file $($_.Name)";
+								$FileContent = Get-Content $_.FullName;
+								
+								$FileContent | %{
+									$CurrentRow = $_;
+									
+									if($CurrentRow -match '^(\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d.\d\d) (.+)'){
+										
+										if($CurrentDate){
+											#Save previous;;;
+											$E = New-Object PSObject -Prop $OutputColumns;
+											$E.LogName = 'SQLLOG';
+											$E.TimeCreated = $CurrentDate
+											$E.Id = 0;
+											$E.Level = '?';
+											$E.ProviderName = ($Buffer[0] -Split '\s+',2)[0]
+											$E.MachineName = 'localhost';
+											$E.Message = $Buffer -Join "`r`n";
+											
+											
+											
+											$AllLogEntries += $E;
+										}
+										
+										$CurrentDate  = Get-Date $matches[1]
+										$Buffer		  = @(
+												$matches[2]
+											)
+									} else {
+										$Buffer	 += $_;
+									}	
+									
+								}
+								
+								#$AllLogEntries += Import-CliXMl $_.FullName
+							} catch {
+								write-host "	Failed: $_";
+							}
+						}
+						
+						return $AllLogEntries;
+				}
+				
 		CLUSTERLOG = NewLogCollector "$Source\clusterlog" {
 		
 						
